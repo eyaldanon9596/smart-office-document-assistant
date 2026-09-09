@@ -25,10 +25,9 @@ it by hand:
 1. n8n → **Credentials → New → Header Auth**.
 2. Name: **`Smart Office Shared Secret`**
 3. Header Name: `x-api-key`
-4. Header Value: a secret you choose. A generated one is already sitting in the
-   app's local `.env` (git-ignored):
-   `lwLCFdEG2Udhj_UyhTADktm-1e2fiiJWjA0hnlfczxCXhkHi` — use that, or pick your
-   own and update `.env` to match.
+4. Header Value: a secret you choose. A generated starting value is already in
+   the app's local `.env` (git-ignored) on the `N8N_SECRET` line — copy it from
+   there, or pick your own and update `.env` to match.
 5. Open each of the three **Webhook** nodes and select this credential under
    "Authentication → Header Auth". (The workflows already set
    `authentication: headerAuth`; they just need the credential picked.)
