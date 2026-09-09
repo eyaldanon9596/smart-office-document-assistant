@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.file_name }}{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/dashboard">&larr; Back to dashboard</a></p>
+
+<div class="detail-head">
+  <h1>{{ doc.file_name }}</h1>
+  <span class="{{ urgency_class(doc.urgency) }} badge-lg">Urgency: {{ doc.urgency }}</span>
+</div>
+
+<dl class="fields">
+  <div><dt>Status</dt>
+    <dd><span class="status status-{{ doc.status|lower|replace(' ', '-') }}">{{ doc.status }}</span></dd></div>
+  <div><dt>Document ID</dt><dd>{{ doc.document_id }}</dd></div>
+  <div><dt>Received at</dt><dd>{{ doc.received_at }}</dd></div>
+  <div><dt>File</dt>
+    <dd>
+      {% if doc.file_link %}<a href="{{ doc.file_link }}" target="_blank" rel="noopener">Open the original file</a>
+      {% else %}Not found{% endif %}
+    </dd></div>
+
+  {% for key, label in field_labels %}
+  <div><dt>{{ label }}</dt><dd>{{ doc[key] }}</dd></div>
+  {% endfor %}
+
+  {% if doc.reviewed_by %}
+  <div><dt>Reviewed by</dt><dd>{{ doc.reviewed_by }}</dd></div>
+  {% endif %}
+  {% if doc.review_note %}
+  <div><dt>Review note</dt><dd>{{ doc.review_note }}</dd></div>
+  {% endif %}
+</dl>
+
+<section class="review-box">
+  <h2>Human review</h2>
+  <form id="review-form" data-document-id="{{ doc.document_id }}">
+    <label class="field">
+      <span>Your name or email <small>(required)</small></span>
+      <input type="text" id="reviewed-by" name="reviewed_by" required
+             placeholder="you@example.com" autocomplete="email">
+    </label>
+    <label class="field">
+      <span>Note <small>(optional, up to 200 characters)</small></span>
+      <textarea id="review-note" name="review_note" maxlength="200" rows="3"></textarea>
+      <small id="note-count" class="note-count">0 / 200</small>
+    </label>
+
+    <p id="review-message" class="inline-message" hidden></p>
+
+    <div class="review-actions">
+      <button type="submit" class="btn btn-primary" data-status="Reviewed">Mark as reviewed</button>
+      <button type="submit" class="btn btn-quiet" data-status="Needs Review">Send back to Needs Review</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

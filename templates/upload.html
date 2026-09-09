@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Upload a document{% endblock %}
+
+{% block content %}
+<h1>Send a document for processing</h1>
+<p class="lede">
+  Choose one PDF, DOCX or TXT file. It is sent to the office automation, which
+  reads it and files the result. This can take up to a minute.
+</p>
+
+<form id="upload-form" data-max-mb="{{ max_file_mb }}" novalidate>
+  <div id="dropzone" class="dropzone" tabindex="0">
+    <input type="file" id="file-input" name="file"
+           accept=".pdf,.docx,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+    <p class="dropzone-hint">Drag a file here, or <span class="link-like">browse</span></p>
+    <p id="file-summary" class="file-summary" hidden></p>
+  </div>
+
+  <label class="field">
+    <span>Your email <small>(recorded as who submitted the document)</small></span>
+    <input type="email" id="submitted-by" name="submitted_by"
+           placeholder="you@example.com" autocomplete="email">
+  </label>
+
+  <p id="upload-error" class="inline-error" hidden></p>
+
+  <button type="submit" id="send-btn" class="btn btn-primary" disabled>Send document</button>
+</form>
+
+<div id="processing" class="processing" hidden aria-live="polite">
+  <div class="spinner" aria-hidden="true"></div>
+  <div>
+    <p class="processing-title">Processing your document…</p>
+    <p class="processing-note">
+      The automation is reading the file. This can take up to a minute — please
+      keep this tab open.
+    </p>
+  </div>
+</div>
+{% endblock %}
