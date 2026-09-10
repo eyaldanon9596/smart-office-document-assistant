@@ -1,0 +1,201 @@
+{
+  "name": "Smart Office — POST /scan-inbox (email intake)",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Webhook POST scan-inbox",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-400, 0],
+      "parameters": { "httpMethod": "POST", "path": "scan-inbox", "authentication": "headerAuth", "responseMode": "responseNode", "options": {} },
+      "credentials": { "httpHeaderAuth": { "id": "q7gpb9rI1PNWoNgh", "name": "Smart Office Shared Secret" } }
+    },
+    {
+      "id": "mklabel",
+      "name": "Ensure label exists",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "onError": "continueRegularOutput",
+      "position": [-200, 0],
+      "parameters": { "resource": "label", "operation": "create", "name": "SmartOffice/Processed" },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "getlabels",
+      "name": "Get labels",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [0, 0],
+      "parameters": { "resource": "label", "operation": "getAll", "returnAll": true },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "resolve",
+      "name": "Resolve label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const want = 'SmartOffice/Processed';\nconst hit = $input.all().map(x => x.json).find(l => l && l.name === want);\nif (!hit) throw new Error('Gmail label \"SmartOffice/Processed\" is missing and could not be created.');\nreturn [{ json: { labelId: hit.id } }];\n"
+      }
+    },
+    {
+      "id": "readlog",
+      "name": "Read the log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [400, 0],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "mode": "id", "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM" },
+        "sheetName": { "__rl": true, "mode": "id", "value": "870850851" },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "pHFYlfi7ARohCIG1", "name": "Google Sheets OAuth2 API" } }
+    },
+    {
+      "id": "seen",
+      "name": "Collect seen filenames",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Collapse the log rows into ONE item so the Gmail search runs once, not per row.\nconst seen = $input.all()\n  .map(x => String((x.json || {})['File Name'] || '').trim().toLowerCase())\n  .filter(Boolean);\nreturn [{ json: { seen } }];\n"
+      }
+    },
+    {
+      "id": "find",
+      "name": "Find invoice emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "alwaysOutputData": true,
+      "position": [600, 0],
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 15,
+        "simple": false,
+        "filters": { "q": "newer_than:12h -label:SmartOffice/Processed (filename:pdf OR filename:docx OR filename:txt)" },
+        "options": { "downloadAttachments": true, "dataPropertyAttachmentsPrefixName": "attachment_" }
+      },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "explode",
+      "name": "Explode attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "alwaysOutputData": true,
+      "position": [820, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// One output item per NEW pdf/docx/txt attachment, capped so we stay under\n// Gemini's 5-requests-per-minute free tier. Run the button again for the rest.\nconst OK = { pdf: 'application/pdf', txt: 'text/plain', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };\nconst CAP = 4;\nconst seen = new Set(($('Collect seen filenames').first().json.seen) || []);\nconst all = $input.all();\nconst real = all.filter(m => m.json && (m.json.id || m.json.payload));\nconst out = [];\nfor (let i = 0; i < all.length && out.length < CAP; i++) {\n  const m = all[i];\n  if (!(m.json && (m.json.id || m.json.payload))) continue;\n  const j = m.json;\n  const from = (j.from && j.from.value && j.from.value[0] && j.from.value[0].address)\n    || (j.from && j.from.text) || 'Not found';\n  const subject = j.subject || '';\n  const bin = m.binary || {};\n  for (const key of Object.keys(bin)) {\n    if (out.length >= CAP) break;\n    const meta = bin[key] || {};\n    const name = meta.fileName || meta.filename || key;\n    const ext = String(name.split('.').pop() || '').toLowerCase();\n    if (!OK[ext]) continue;\n    if (seen.has(String(name).trim().toLowerCase())) continue;\n    const buf = await this.helpers.getBinaryDataBuffer(i, key);\n    out.push({ json: {\n      messageId: j.id || '',\n      from: String(from),\n      subject: String(subject),\n      file_name: name,\n      mime_type: OK[ext],\n      file_base64: buf.toString('base64'),\n    } });\n  }\n}\nif (out.length === 0) return [{ json: { _empty: true, scanned: real.length } }];\nreturn out;\n"
+      }
+    },
+    {
+      "id": "ifany",
+      "name": "Any new attachments?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1040, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.file_name }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "call",
+      "name": "Send to process-document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1260, -100],
+      "parameters": {
+        "method": "POST",
+        "url": "https://psagot.app.n8n.cloud/webhook/process-document",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ file_name: $json.file_name, mime_type: $json.mime_type, file_base64: $json.file_base64, submitted_by: $json.from }) }}",
+        "options": { "timeout": 120000 }
+      },
+      "credentials": { "httpHeaderAuth": { "id": "q7gpb9rI1PNWoNgh", "name": "Smart Office Shared Secret" } }
+    },
+    {
+      "id": "labelit",
+      "name": "Tag email as processed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "onError": "continueRegularOutput",
+      "position": [1480, -100],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ ($json.status === 'processed' && $json.document_id) ? $('Explode attachments').item.json.messageId : '' }}",
+        "labelIds": "={{ [$('Resolve label').first().json.labelId] }}"
+      },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "sum",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, -100],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const src = $('Explode attachments').all().map(x => x.json).filter(j => !j._empty);\nconst outs = $input.all();\nconst results = outs.map((x, idx) => {\n  const s = src[idx] || {};\n  const b = x.json || {};\n  const ok = b.status === 'processed' && !!b.document_id;\n  return {\n    from: s.from || '',\n    subject: s.subject || '',\n    file_name: s.file_name || '',\n    document_id: b.document_id || null,\n    ok,\n    error: ok ? null : (b.message || b.error || 'processing failed'),\n  };\n});\nconst realEmails = $('Find invoice emails').all().filter(m => m.json && (m.json.id || m.json.payload)).length;\nreturn [{ json: {\n  scanned: realEmails,\n  processed: results.filter(r => r.ok).length,\n  skipped: results.filter(r => !r.ok).length,\n  results,\n} }];\n"
+      }
+    },
+    {
+      "id": "respok",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1920, -100],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": {} }
+    },
+    {
+      "id": "respnone",
+      "name": "Respond nothing found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1260, 120],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ scanned: ($('Explode attachments').first().json.scanned || 0), processed: 0, skipped: 0, results: [], message: 'No new invoice attachments in the last 12 hours.' }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook POST scan-inbox": { "main": [[{ "node": "Ensure label exists", "type": "main", "index": 0 }]] },
+    "Ensure label exists": { "main": [[{ "node": "Get labels", "type": "main", "index": 0 }]] },
+    "Get labels": { "main": [[{ "node": "Resolve label", "type": "main", "index": 0 }]] },
+    "Resolve label": { "main": [[{ "node": "Read the log", "type": "main", "index": 0 }]] },
+    "Read the log": { "main": [[{ "node": "Collect seen filenames", "type": "main", "index": 0 }]] },
+    "Collect seen filenames": { "main": [[{ "node": "Find invoice emails", "type": "main", "index": 0 }]] },
+    "Find invoice emails": { "main": [[{ "node": "Explode attachments", "type": "main", "index": 0 }]] },
+    "Explode attachments": { "main": [[{ "node": "Any new attachments?", "type": "main", "index": 0 }]] },
+    "Any new attachments?": {
+      "main": [
+        [{ "node": "Send to process-document", "type": "main", "index": 0 }],
+        [{ "node": "Respond nothing found", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send to process-document": { "main": [[{ "node": "Tag email as processed", "type": "main", "index": 0 }]] },
+    "Tag email as processed": { "main": [[{ "node": "Summarize", "type": "main", "index": 0 }]] },
+    "Summarize": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

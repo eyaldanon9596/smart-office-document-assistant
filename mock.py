@@ -285,3 +285,15 @@ def analyze_document(payload: dict) -> dict:
         f"Open the original file and confirm the amounts before acting."
     )
     return {"document_id": doc_id, "analysis": analysis}
+
+
+def scan_inbox(payload: dict) -> dict:
+    """Mimics the /scan-inbox add-on. Canned result so the button works offline."""
+    return {
+        "scanned": 0,
+        "processed": 0,
+        "skipped": 0,
+        "results": [],
+        "message": "Mock mode does not read email. Run against the live automation "
+        "with USE_MOCK=false to import invoices from your inbox.",
+    }

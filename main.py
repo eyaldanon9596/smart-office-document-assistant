@@ -190,3 +190,15 @@ async def api_analyze(request: Request):
         return JSONResponse(n8n_client.analyze_document(payload))
     except N8nError as exc:
         return _api_error(exc)
+
+
+@app.post("/api/scan-inbox")
+async def api_scan_inbox(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    try:
+        return JSONResponse(n8n_client.scan_inbox(payload))
+    except N8nError as exc:
+        return _api_error(exc)

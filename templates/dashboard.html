@@ -4,8 +4,12 @@
 {% block content %}
 <div class="dash-head">
   <h1>Documents</h1>
-  <a class="btn" href="/dashboard">Refresh</a>
+  <div class="dash-actions">
+    <button type="button" id="scan-btn" class="btn">Check email for invoices</button>
+    <a class="btn" href="/dashboard">Refresh</a>
+  </div>
 </div>
+<p id="scan-message" class="inline-message" hidden></p>
 
 {% if documents %}
 <form id="filters" class="filters" onsubmit="return false">

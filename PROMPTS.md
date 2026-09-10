@@ -136,3 +136,36 @@ in `CONTRACT.md` and does not change the three core flows or the sheet.
 - **Verified**: `POST /webhook/analyze` and `POST /api/analyze` both return the
   structured briefing (~12–30 s); unknown id → `404` becomes the app's friendly
   sentence. Analysis richness tracks the quality of the file's extracted text.
+
+## 6. Add-on — email intake (`POST /scan-inbox`)
+
+Requested: a dashboard button that imports invoice attachments from the last
+12 hours of email, and "must not process invoices that are already processed".
+
+- **Workflow** `Smart Office — POST /scan-inbox (email intake)`
+  (`UHeONQn07UscXMGk`): Webhook → ensure/resolve a `SmartOffice/Processed` Gmail
+  label → read the log → **Collect seen filenames** (collapse to one item so the
+  Gmail search runs once) → Gmail search
+  `newer_than:12h -label:SmartOffice/Processed (filename:pdf OR filename:docx OR filename:txt)`
+  with attachments downloaded → **Explode attachments** (one item per new
+  PDF/DOCX/TXT, capped at 4) → for each: HTTP POST to `/process-document` →
+  on success, tag the email `SmartOffice/Processed` → Summarize → Respond
+  `{ scanned, processed, skipped, results }`.
+- **Dedup** ("must not re-process"): two layers — the Gmail label excludes
+  whole emails from the search, and the filename check skips an attachment
+  already in the log. The label is applied **only on a successful import**, so a
+  transient failure retries on the next run instead of being lost.
+- **Rate limit**: Gemini's free tier is **5 requests/minute**. The first pass
+  fired ~14 at once → all `429`. Fixes: cap the scan at 4 attachments/run, and
+  `retryOnFail` (3× / 20 s) on the Information Extractor in `/process-document`.
+- **App**: `POST /api/scan-inbox` pass-through with a 300 s timeout of its own,
+  `scan_inbox()` in `n8n_client.py` + `mock.py`, `N8N_SCAN_PATH` in `config.py`,
+  a "Check email for invoices" button on the dashboard, wired in `app.js`.
+- **Bugs found while testing**: the Gmail search fanned out (ran once per log
+  row → every attachment 7×) — fixed with the collapse node; `from`/`subject`
+  read wrong (raw MIME headers) — use `json.subject` and
+  `json.from.value[0].address`.
+- **Status**: mechanics verified (search → download → per-attachment call →
+  label → summary). A full green import needs an invoice email in the window
+  that isn't already labelled; the one test email got labelled on the
+  pre-fix run.

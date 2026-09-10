@@ -45,6 +45,7 @@ class Settings:
     documents_path: str
     review_path: str
     analyze_path: str
+    scan_path: str
     secret: str
     request_timeout_ms: int
     max_file_mb: int
@@ -80,6 +81,7 @@ def _load() -> Settings:
         documents_path=_get("N8N_DOCUMENTS_PATH", "/documents"),
         review_path=_get("N8N_REVIEW_PATH", "/review"),
         analyze_path=_get("N8N_ANALYZE_PATH", "/analyze"),
+        scan_path=_get("N8N_SCAN_PATH", "/scan-inbox"),
         secret=secret,
         request_timeout_ms=_get_int("REQUEST_TIMEOUT_MS", "90000"),
         max_file_mb=_get_int("MAX_FILE_MB", "10"),

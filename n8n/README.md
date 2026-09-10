@@ -10,11 +10,19 @@ the live workflows are the source of truth.
 | `post-process-document.json` | Smart Office — POST /process-document | `xSdzr7O5RCANQwRg` | `POST /webhook/process-document` |
 | `post-review.json` | Smart Office — POST /review | `W4uXz3R6dympePtC` | `POST /webhook/review` |
 | `post-analyze.json` | Smart Office — POST /analyze (AI Agent add-on) | `VFkK3dDke7eJuCA0` | `POST /webhook/analyze` |
+| `post-scan-inbox.json` | Smart Office — POST /scan-inbox (email intake) | `UHeONQn07UscXMGk` | `POST /webhook/scan-inbox` |
 
-All four are **active** and tested end to end (see `../PROMPTS.md`). The first
-three implement `CONTRACT.md`; `/analyze` is an extra — an AI Agent that
-re-reads the file from Drive and writes a briefing, shown on demand in the app,
-nothing written back to the Sheet.
+All five are **active**. The first three implement `CONTRACT.md`; the last two
+are extras:
+
+- **/analyze** — an AI Agent that re-reads the file from Drive and writes a
+  briefing, shown on demand in the app; nothing written back to the Sheet.
+- **/scan-inbox** — pulls PDF/DOCX/TXT attachments from the last 12 h of Gmail
+  (that don't already carry the `SmartOffice/Processed` label) and feeds each
+  through `/process-document`. On success the email is tagged
+  `SmartOffice/Processed` so a re-run never processes it twice. Capped at 4
+  attachments per run because Gemini's free tier allows 5 requests/minute —
+  click again for the rest.
 
 ## Status
 

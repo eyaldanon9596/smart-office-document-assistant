@@ -67,10 +67,18 @@ after each: `GET /documents`, then `POST /process-document`, then `POST /review`
 
 ### Add-on: AI analysis
 
-Not part of the data contract. The document detail page has an **"Analyze this
-document"** button. It calls `POST /api/analyze` → the n8n workflow
-`Smart Office — POST /analyze`, which re-reads the original file from Drive and
-runs an **AI Agent** (Gemini) to produce a plain-language briefing: what the
-document is, a short profile of the sender company, and what each line item
-means. Shown on demand only — the Google Sheet is not touched. Mock mode returns
-a canned briefing so the button works offline.
+Not part of the data contract.
+
+- **"Analyze this document"** (document detail page) → `POST /api/analyze` →
+  `Smart Office — POST /analyze`: re-reads the original file from Drive and runs
+  an **AI Agent** (Gemini) for a plain-language briefing — what the document is,
+  a short profile of the sender company, and what each line item means. On
+  demand only; the Sheet is not touched.
+- **"Check email for invoices"** (dashboard) → `POST /api/scan-inbox` →
+  `Smart Office — POST /scan-inbox`: finds PDF/DOCX/TXT attachments in the last
+  12 hours of Gmail that aren't already tagged `SmartOffice/Processed`, feeds
+  each through `/process-document`, and tags the email on success so nothing is
+  imported twice. Capped at 4 per run (Gemini free-tier rate limit); run it
+  again for the rest.
+
+Mock mode returns canned results for both so the buttons work offline.

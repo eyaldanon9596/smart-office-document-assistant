@@ -129,6 +129,45 @@ if (filters) {
   apply();
 }
 
+// ---- Dashboard: pull invoices from email ------------------------------
+const scanBtn = document.getElementById("scan-btn");
+if (scanBtn) {
+  const msg = document.getElementById("scan-message");
+  let scanning = false;
+  scanBtn.addEventListener("click", async () => {
+    if (scanning) return;
+    scanning = true;
+    scanBtn.disabled = true;
+    scanBtn.textContent = "Checking email…";
+    msg.hidden = false;
+    msg.className = "inline-message";
+    msg.textContent = "Reading the last 12 hours of email for invoice attachments. This can take a few minutes.";
+    try {
+      const res = await fetch("/api/scan-inbox", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const b = await res.json().catch(() => ({}));
+      if (res.ok && typeof b.processed === "number") {
+        if (b.processed > 0) {
+          msg.className = "inline-message ok";
+          msg.textContent = `Added ${b.processed} document${b.processed === 1 ? "" : "s"} from email. Reloading…`;
+          setTimeout(() => (window.location = "/dashboard"), 1200);
+          return;
+        }
+        msg.textContent = b.message || `Checked ${b.scanned || 0} email${b.scanned === 1 ? "" : "s"} — nothing new to add.`;
+        if (b.skipped) msg.textContent += ` (${b.skipped} could not be processed — see n8n.)`;
+      } else {
+        msg.className = "inline-message error";
+        msg.textContent = b.message || "The email check could not be completed. Please try again.";
+      }
+    } catch {
+      msg.className = "inline-message error";
+      msg.textContent = "The email check could not be sent. Check your connection and try again.";
+    }
+    scanBtn.disabled = false;
+    scanBtn.textContent = "Check email for invoices";
+    scanning = false;
+  });
+}
+
 // ---- Detail: review submission ----------------------------------------
 const reviewForm = document.getElementById("review-form");
 if (reviewForm) {

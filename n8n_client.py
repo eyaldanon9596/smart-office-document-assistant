@@ -85,10 +85,10 @@ def _raise_for_error_response(resp: httpx.Response) -> None:
     )
 
 
-def _post(path: str, json_body: dict) -> dict | list:
+def _post(path: str, json_body: dict, timeout_s: float | None = None) -> dict | list:
     url = settings.url_for(path)
     try:
-        with httpx.Client(timeout=settings.request_timeout_s) as client:
+        with httpx.Client(timeout=timeout_s or settings.request_timeout_s) as client:
             resp = client.post(url, json=json_body, headers=_headers())
     except (httpx.ConnectError, httpx.ConnectTimeout):
         raise N8nError(
@@ -192,3 +192,12 @@ def analyze_document(payload: dict) -> dict:
                 http_status=404,
             )
     return _post(settings.analyze_path, payload)      # -> real POST /analyze
+
+
+def scan_inbox(payload: dict) -> dict:
+    """Add-on: pull invoice attachments from the last 12 hours of email into the
+    system. Slow (each attachment runs the full pipeline), so it gets a long
+    timeout of its own."""
+    if settings.use_mock:
+        return mock.scan_inbox(payload)
+    return _post(settings.scan_path, payload, timeout_s=300)  # -> real POST /scan-inbox
