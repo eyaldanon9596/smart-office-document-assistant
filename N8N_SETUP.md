@@ -17,37 +17,52 @@ activating.**
 All three validate clean (`n8n_validate_workflow`, 0 errors). "Valid" only means
 the node graph is well-formed — it does **not** mean they run end to end yet.
 
-## Step 1 — Header Auth credential (required, could not be created for you)
+## Step 1 — Header Auth credential — DONE
 
-Creating a credential that holds a secret is blocked for the assistant, so make
-it by hand:
+Credential **`Smart Office Shared Secret`** (`httpHeaderAuth`, id
+`q7gpb9rI1PNWoNgh`) was created and attached to all three Webhook nodes.
 
-1. n8n → **Credentials → New → Header Auth**.
-2. Name: **`Smart Office Shared Secret`**
-3. Header Name: `x-api-key`
-4. Header Value: a secret you choose. A generated starting value is already in
-   the app's local `.env` (git-ignored) on the `N8N_SECRET` line — copy it from
-   there, or pick your own and update `.env` to match.
-5. Open each of the three **Webhook** nodes and select this credential under
-   "Authentication → Header Auth". (The workflows already set
-   `authentication: headerAuth`; they just need the credential picked.)
+- Header Name: `x-api-key`
+- Header Value: the `N8N_SECRET` value in the app's local `.env` (git-ignored).
+  The secret is **not** in any committed file, so `git grep` finds nothing
+  (SPEC F8).
 
-The secret is deliberately **not** written into any committed file, so
-`git grep` for it finds nothing (SPEC F8).
+Nothing to do here unless you want to rotate the secret — if you do, change it
+in the credential and in `.env` together.
 
 ## Step 2 — Replace the placeholders
 
-| Placeholder | Where | Replace with |
+| Placeholder | Where | Status |
 |---|---|---|
-| `REPLACE_WITH_SHEET_ID` | Google Sheets nodes in all three workflows | The `Document Processing Log` spreadsheet id |
-| `REPLACE_WITH_DRIVE_FOLDER_ID` | "Upload original to Drive" (process-document) | The Drive intake folder id |
-| `REPLACE_WITH_NOTIFY_EMAIL` | "Notify (urgent)" and "Notify (normal)" (process-document) | The address that should get processing notifications |
+| `REPLACE_WITH_NOTIFY_EMAIL` | "Notify (urgent)" / "Notify (normal)" | **Done** — set to `eyal@psagot.net` (the instance/credential owner). Change if you want a different recipient. |
+| `REPLACE_WITH_SHEET_ID` | Google Sheets nodes in all three workflows | **You must fill this.** See below. |
+| `REPLACE_WITH_DRIVE_FOLDER_ID` | "Upload original to Drive" (process-document) | **You must fill this.** See below. |
 
-The Google Sheets nodes use resource-locator **id** mode with a placeholder. The
-easiest fix: open each Sheets node, switch the Document field to "From list",
-pick the sheet — n8n then fills the column schema for the mapper automatically.
-Do this for **Read Processing Log** (×2), **Update row**, and **Append row to
-Processing Log**.
+### Why the Sheet id and Drive folder id could not be filled
+
+The n8n Google Sheets / Drive / Gmail credentials on this instance belong to
+**`eyal@psagot.net`**. The Google account reachable from this session is
+**`eyal9596@gmail.com`** — a different account. No `Document Processing Log`
+spreadsheet exists in the account visible here, and anything created there would
+not be reachable by the `eyal@psagot.net` n8n credentials without being shared.
+
+So this step needs you, signed in as `eyal@psagot.net`:
+
+1. **Create the sheet** `Document Processing Log` with the 15 columns in Step 3
+   (or point at an existing one). Copy its id from the URL
+   (`/spreadsheets/d/<THIS>/edit`).
+2. **Create or choose the Drive intake folder.** Copy its id from the URL
+   (`/folders/<THIS>`).
+3. In n8n, open each Google Sheets node, switch the **Document** field to
+   "From list" and pick the sheet — n8n fills the column schema for the mapper
+   automatically. Do this for **Read Processing Log** (×2), **Update row**, and
+   **Append row to Processing Log**.
+4. Open **"Upload original to Drive"** and set the **Parent Folder** to the
+   intake folder.
+
+If you'd rather run everything from `eyal9596@gmail.com`: add Google Sheets /
+Drive / Gmail credentials for that account in n8n, then re-select them on the
+nodes (they currently reference the `psagot.net` credentials by id).
 
 ## Step 3 — Confirm the sheet has the 15 columns
 
