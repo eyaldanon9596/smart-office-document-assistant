@@ -176,3 +176,19 @@ def submit_review(payload: dict) -> dict:
                 http_status=404,
             )
     return _post(settings.review_path, payload)       # -> real POST /review
+
+
+def analyze_document(payload: dict) -> dict:
+    """Add-on: a deeper AI-agent write-up of one document. Not part of the core
+    contract; the sheet is untouched."""
+    if settings.use_mock:
+        try:
+            return mock.analyze_document(payload)
+        except mock.MockNotFound:
+            raise N8nError(
+                "upstream",
+                "That document isn't in the log, so there's nothing to analyse. "
+                "Refresh the dashboard and try again.",
+                http_status=404,
+            )
+    return _post(settings.analyze_path, payload)      # -> real POST /analyze

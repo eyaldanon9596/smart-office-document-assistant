@@ -11,6 +11,7 @@ end** against `https://psagot.app.n8n.cloud`. JSON snapshots are in `n8n/`.
 | Smart Office — GET /documents | `XgwL6Q0TUJvZuMSj` | `GET  /webhook/documents` | 200 + `[]` on empty log; 403 without key |
 | Smart Office — POST /process-document | `xSdzr7O5RCANQwRg` | `POST /webhook/process-document` | 200, nested `fields`, Drive link, row appended, `notification_sent: true` |
 | Smart Office — POST /review | `W4uXz3R6dympePtC` | `POST /webhook/review` | 200 `{status: updated}`; 404 on unknown id |
+| Smart Office — POST /analyze (add-on) | `VFkK3dDke7eJuCA0` | `POST /webhook/analyze` | 200 with an AI-Agent briefing; 404 on unknown id. Not part of `CONTRACT.md`. |
 
 The FastAPI app was also run against the live instance (`USE_MOCK=false`):
 dashboard, detail page and upload all work through real n8n.

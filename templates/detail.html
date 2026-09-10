@@ -32,6 +32,21 @@
   {% endif %}
 </dl>
 
+<section class="analysis-box">
+  <div class="analysis-head">
+    <h2>AI analysis</h2>
+    <button type="button" id="analyze-btn" class="btn"
+            data-document-id="{{ doc.document_id }}">Analyze this document</button>
+  </div>
+  <p class="analysis-hint">
+    Re-reads the original file and writes a plain-language briefing: what the
+    document is, who the sender is, and what each line item means. Takes up to a
+    minute. This does not change anything in the log.
+  </p>
+  <div id="analysis-status" class="inline-message" hidden></div>
+  <div id="analysis-output" class="analysis-output" hidden></div>
+</section>
+
 <section class="review-box">
   <h2>Human review</h2>
   <form id="review-form" data-document-id="{{ doc.document_id }}">

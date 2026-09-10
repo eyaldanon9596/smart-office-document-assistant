@@ -104,3 +104,35 @@ through `POST /process-document` → `200` with the seven fields nested under
 `fields`, a real Drive link, a sheet row, `notification_sent: true`. `POST
 /review` → `200 {"status":"updated"}` and the row flips to `Reviewed`; unknown id
 → `404`. The FastAPI app was also exercised end to end with `USE_MOCK=false`.
+
+### Later fix — the PDF path
+
+A real PDF upload returned 500 (`This operation expects the node's input data to
+contain a binary file 'data'`). The Drive-upload node drops the item's binary,
+so the downstream "Extract text from PDF" had nothing to read — the TXT tests
+never hit that node. Fixed by extracting the text **before** the Drive upload:
+`Decode → Is it a PDF? → extract/carry text → Assemble text (re-attaches the
+Decode binary) → Upload to Drive → …`, with "Has readable text?" and the
+Information Extractor reading via `$('Assemble text')` instead of `$json`.
+Re-verified with a real PDF, through the app.
+
+## 5. Add-on — the AI Agent analysis (`POST /analyze`)
+
+Requested as an extra: an on-demand, deeper write-up of one document. It is not
+in `CONTRACT.md` and does not change the three core flows or the sheet.
+
+- **Workflow** `Smart Office — POST /analyze (AI Agent add-on)`
+  (`VFkK3dDke7eJuCA0`): Webhook (Header Auth) → Sheets read → Code "Find the
+  document" (row by `document_id`, pulls the Drive file id out of `File Link`) →
+  IF found → Google Drive download → IF pdf → Extract PDF / Extract TXT → Code
+  "Build the prompt" (stored fields + full file text) → **AI Agent** (Gemini
+  `gemini-3.6-flash`, `promptType: define`, a system message that fixes the five
+  headings) → Respond `{ document_id, analysis }`. No row match → `404`.
+- **App**: `POST /api/analyze` pass-through (`main.py`), `analyze_document()` in
+  `n8n_client.py` + `mock.py`, `N8N_ANALYZE_PATH` in `config.py`. The detail
+  page gets an "Analyze this document" button and an output area;
+  `static/app.js` renders the returned markdown-ish text (headings, bullets,
+  `**bold**`).
+- **Verified**: `POST /webhook/analyze` and `POST /api/analyze` both return the
+  structured briefing (~12–30 s); unknown id → `404` becomes the app's friendly
+  sentence. Analysis richness tracks the quality of the file's extracted text.

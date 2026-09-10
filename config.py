@@ -44,6 +44,7 @@ class Settings:
     process_path: str
     documents_path: str
     review_path: str
+    analyze_path: str
     secret: str
     request_timeout_ms: int
     max_file_mb: int
@@ -78,6 +79,7 @@ def _load() -> Settings:
         process_path=_get("N8N_PROCESS_PATH", "/process-document"),
         documents_path=_get("N8N_DOCUMENTS_PATH", "/documents"),
         review_path=_get("N8N_REVIEW_PATH", "/review"),
+        analyze_path=_get("N8N_ANALYZE_PATH", "/analyze"),
         secret=secret,
         request_timeout_ms=_get_int("REQUEST_TIMEOUT_MS", "90000"),
         max_file_mb=_get_int("MAX_FILE_MB", "10"),

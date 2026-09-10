@@ -141,11 +141,28 @@ th { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; colo
 }
 .fields dt { font-weight: 700; color: var(--muted); margin: 0; }
 .fields dd { margin: 0; }
-.review-box {
+.review-box, .analysis-box {
   margin-top: 2rem; padding: 1.25rem 1.5rem;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
 }
 .review-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
+
+.analysis-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.analysis-head h2 { margin: 0.25rem 0; }
+.analysis-hint { color: var(--muted); font-size: 0.9rem; margin: 0.35rem 0 0; }
+.analysis-output {
+  margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line);
+}
+.analysis-output h4 {
+  margin: 1.1rem 0 0.35rem; font-size: 0.95rem; color: var(--accent-dark);
+}
+.analysis-output h4:first-child { margin-top: 0; }
+.analysis-output p { margin: 0.35rem 0; }
+.analysis-output ul { margin: 0.35rem 0 0.6rem; padding-left: 1.2rem; }
+.analysis-output li { margin: 0.25rem 0; }
 
 .error-panel {
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;

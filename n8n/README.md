@@ -9,8 +9,12 @@ the live workflows are the source of truth.
 | `get-documents.json` | Smart Office — GET /documents | `XgwL6Q0TUJvZuMSj` | `GET /webhook/documents` |
 | `post-process-document.json` | Smart Office — POST /process-document | `xSdzr7O5RCANQwRg` | `POST /webhook/process-document` |
 | `post-review.json` | Smart Office — POST /review | `W4uXz3R6dympePtC` | `POST /webhook/review` |
+| `post-analyze.json` | Smart Office — POST /analyze (AI Agent add-on) | `VFkK3dDke7eJuCA0` | `POST /webhook/analyze` |
 
-All three are **active** and tested end to end (see `../PROMPTS.md`).
+All four are **active** and tested end to end (see `../PROMPTS.md`). The first
+three implement `CONTRACT.md`; `/analyze` is an extra — an AI Agent that
+re-reads the file from Drive and writes a briefing, shown on demand in the app,
+nothing written back to the Sheet.
 
 ## Status
 

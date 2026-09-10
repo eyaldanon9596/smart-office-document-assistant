@@ -41,7 +41,8 @@ after each: `GET /documents`, then `POST /process-document`, then `POST /review`
 | `mock.py` | In-memory stand-in for the workflows, used when `USE_MOCK=true` |
 | `config.py` | Reads `.env`, fails loudly if a required value is missing |
 | `templates/` | `base`, `upload`, `dashboard`, `detail`, `error` (Jinja2) |
-| `static/app.js` | Upload, processing state, double-submit lock, dashboard filtering, review |
+| `static/app.js` | Upload, processing state, double-submit lock, dashboard filtering, review, AI-analysis button |
+| `n8n/` | JSON snapshots of the four n8n workflows (the automation is the source of truth) |
 | `static/style.css` | All styling; urgency is shown as a word, never colour alone |
 
 ## Features
@@ -63,3 +64,13 @@ after each: `GET /documents`, then `POST /process-document`, then `POST /review`
   log each become a sentence, never a blank screen or a raw status code.
 - **F8 Config & secrets** — all URLs and the secret come from `.env`;
   `.env.example` is committed with placeholders; `.env` is git-ignored.
+
+### Add-on: AI analysis
+
+Not part of the data contract. The document detail page has an **"Analyze this
+document"** button. It calls `POST /api/analyze` → the n8n workflow
+`Smart Office — POST /analyze`, which re-reads the original file from Drive and
+runs an **AI Agent** (Gemini) to produce a plain-language briefing: what the
+document is, a short profile of the sender company, and what each line item
+means. Shown on demand only — the Google Sheet is not touched. Mock mode returns
+a canned briefing so the button works offline.

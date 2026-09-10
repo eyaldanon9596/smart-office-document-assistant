@@ -183,3 +183,69 @@ if (reviewForm) {
     saving = false;
   });
 }
+
+// ---- Detail: AI analysis add-on --------------------------------------
+const analyzeBtn = document.getElementById("analyze-btn");
+if (analyzeBtn) {
+  const statusBox = document.getElementById("analysis-status");
+  const outBox = document.getElementById("analysis-output");
+  let running = false;
+
+  // Minimal markdown: **bold**, "* " bullets, "**Heading**" lines, blank-line paras.
+  const render = (text) => {
+    const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    let html = "";
+    let inList = false;
+    for (const raw of text.split("\n")) {
+      const line = raw.trim();
+      const heading = line.match(/^\*\*(.+?)\*\*:?$/);
+      if (!line) { if (inList) { html += "</ul>"; inList = false; } continue; }
+      if (heading) {
+        if (inList) { html += "</ul>"; inList = false; }
+        html += "<h4>" + inline(heading[1]) + "</h4>";
+      } else if (line.startsWith("* ") || line.startsWith("- ")) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        html += "<li>" + inline(line.slice(2)) + "</li>";
+      } else {
+        if (inList) { html += "</ul>"; inList = false; }
+        html += "<p>" + inline(line) + "</p>";
+      }
+    }
+    if (inList) html += "</ul>";
+    return html;
+  };
+
+  analyzeBtn.addEventListener("click", async () => {
+    if (running) return;
+    running = true;
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyzing…";
+    statusBox.hidden = false;
+    statusBox.className = "inline-message";
+    statusBox.textContent = "Reading the file and writing the briefing…";
+    outBox.hidden = true;
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document_id: analyzeBtn.dataset.documentId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.analysis) {
+        statusBox.hidden = true;
+        outBox.hidden = false;
+        outBox.innerHTML = render(body.analysis);
+      } else {
+        statusBox.className = "inline-message error";
+        statusBox.textContent = body.message || "The analysis could not be completed. Please try again.";
+      }
+    } catch {
+      statusBox.className = "inline-message error";
+      statusBox.textContent = "The analysis could not be sent. Check your connection and try again.";
+    }
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = "Analyze again";
+    running = false;
+  });
+}

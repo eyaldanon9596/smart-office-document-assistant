@@ -181,3 +181,12 @@ async def api_review(request: Request):
         return JSONResponse(n8n_client.submit_review(payload))
     except N8nError as exc:
         return _api_error(exc)
+
+
+@app.post("/api/analyze")
+async def api_analyze(request: Request):
+    payload = await request.json()
+    try:
+        return JSONResponse(n8n_client.analyze_document(payload))
+    except N8nError as exc:
+        return _api_error(exc)

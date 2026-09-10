@@ -256,3 +256,32 @@ def submit_review(payload: dict) -> dict:
                 row["review_note"] = payload.get("review_note", "")
                 return {"status": "updated", "document_id": doc_id}
     raise MockNotFound(doc_id)
+
+
+def analyze_document(payload: dict) -> dict:
+    """Mimics the /analyze add-on. Canned briefing so the button works offline."""
+    doc_id = payload.get("document_id")
+    with _lock:
+        row = next((r for r in _DOCS if r["document_id"] == doc_id), None)
+    if row is None:
+        raise MockNotFound(doc_id)
+
+    sender = row["sender_or_company"]
+    analysis = (
+        f"**What this document is**\n"
+        f"A {row['document_type']} from {sender}, handled by the "
+        f"{row['department']} department. {row['summary']} "
+        f"Requested action: {row['requested_action']}. Deadline: {row['deadline']}.\n\n"
+        f"**About the sender**\n"
+        f"{sender} is the party that issued this document. (Mock mode returns a "
+        f"placeholder here — the live add-on asks the AI agent to profile the "
+        f"company.)\n\n"
+        f"**Line items**\n"
+        f"* Mock mode does not re-read the file, so individual line items are not "
+        f"listed. Run against the live automation to see each charge explained.\n\n"
+        f"**Worth a closer look**\n"
+        f"* Urgency is {row['urgency']} and the status is {row['status']}.\n\n"
+        f"**Recommended next step**\n"
+        f"Open the original file and confirm the amounts before acting."
+    )
+    return {"document_id": doc_id, "analysis": analysis}
