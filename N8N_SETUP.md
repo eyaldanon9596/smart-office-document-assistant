@@ -1,10 +1,11 @@
 # N8N_SETUP.md — finishing and activating the Part 1 workflows
 
 There was no Part 1 specification in the repo, so these workflows were built to
-satisfy **`CONTRACT.md` only**. They are created **inactive** and wired to the
-Google / OpenAI credentials already on the `psagot` instance. Every value that
-depends on your Google Workspace is a literal placeholder. **Review before
-activating.**
+satisfy **`CONTRACT.md` only**. They are created **inactive**. The Header Auth
+credential, the `Document Processing Log` sheet, the Drive intake folder, the
+notify address and all node ids are filled in. What remains is confirming the
+n8n Google credentials use the `eyal9596@gmail.com` account, then activating.
+**Review before activating.**
 
 ## What was created
 
@@ -30,43 +31,38 @@ Credential **`Smart Office Shared Secret`** (`httpHeaderAuth`, id
 Nothing to do here unless you want to rotate the secret — if you do, change it
 in the credential and in `.env` together.
 
-## Step 2 — Replace the placeholders
+## Step 2 — Placeholders — DONE (all three project resources live in `eyal9596@gmail.com`)
 
-| Placeholder | Where | Status |
+| Placeholder | Where | Value now set |
 |---|---|---|
-| `REPLACE_WITH_NOTIFY_EMAIL` | "Notify (urgent)" / "Notify (normal)" | **Done** — set to `eyal@psagot.net` (the instance/credential owner). Change if you want a different recipient. |
-| `REPLACE_WITH_SHEET_ID` | Google Sheets nodes in all three workflows | **You must fill this.** See below. |
-| `REPLACE_WITH_DRIVE_FOLDER_ID` | "Upload original to Drive" (process-document) | **You must fill this.** See below. |
+| `REPLACE_WITH_NOTIFY_EMAIL` | "Notify (urgent)" / "Notify (normal)" | `eyal9596@gmail.com` |
+| `REPLACE_WITH_SHEET_ID` | 4 Google Sheets nodes across the 3 workflows | `1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM` |
+| `REPLACE_WITH_DRIVE_FOLDER_ID` | "Upload original to Drive" | `19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN` |
 
-### Why the Sheet id and Drive folder id could not be filled
+Created in `eyal9596@gmail.com` Drive:
 
-The n8n Google Sheets / Drive / Gmail credentials on this instance belong to
-**`eyal@psagot.net`**. The Google account reachable from this session is
-**`eyal9596@gmail.com`** — a different account. No `Document Processing Log`
-spreadsheet exists in the account visible here, and anything created there would
-not be reachable by the `eyal@psagot.net` n8n credentials without being shared.
+- **Spreadsheet `Document Processing Log`** —
+  `https://docs.google.com/spreadsheets/d/1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM/edit`
+  Header row already holds the 15 columns from `CONTRACT.md` section 7.
+- **Folder `Smart Office Intake`** —
+  `https://drive.google.com/drive/folders/19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN`
 
-So this step needs you, signed in as `eyal@psagot.net`:
+Two things still need you in the n8n UI:
 
-1. **Create the sheet** `Document Processing Log` with the 15 columns in Step 3
-   (or point at an existing one). Copy its id from the URL
-   (`/spreadsheets/d/<THIS>/edit`).
-2. **Create or choose the Drive intake folder.** Copy its id from the URL
-   (`/folders/<THIS>`).
-3. In n8n, open each Google Sheets node, switch the **Document** field to
-   "From list" and pick the sheet — n8n fills the column schema for the mapper
-   automatically. Do this for **Read Processing Log** (×2), **Update row**, and
-   **Append row to Processing Log**.
-4. Open **"Upload original to Drive"** and set the **Parent Folder** to the
-   intake folder.
+1. **Confirm the n8n Google credentials are the `eyal9596@gmail.com` account.**
+   The nodes reference the existing credentials by id (Sheets `pHFYlfi7ARohCIG1`,
+   Drive `ca58XKLdnQURD47g`, Gmail `AYgjFyDnQF1fGC7w`). I can't see which Google
+   login they were authorised with. Open each, and if it isn't
+   `eyal9596@gmail.com`, reconnect it (or add new credentials for that account
+   and select them on the nodes).
+2. **Confirm the sheet tab name.** The nodes use `sheetName` = "Document
+   Processing Log". If the tab inside the new spreadsheet is called "Sheet1"
+   instead, open each Google Sheets node and pick the tab from the list (this
+   also populates the column mapper).
 
-If you'd rather run everything from `eyal9596@gmail.com`: add Google Sheets /
-Drive / Gmail credentials for that account in n8n, then re-select them on the
-nodes (they currently reference the `psagot.net` credentials by id).
+## Step 3 — The sheet columns (already created, for reference)
 
-## Step 3 — Confirm the sheet has the 15 columns
-
-`CONTRACT.md` section 7. The header row must read exactly:
+`CONTRACT.md` section 7 — the header row of `Document Processing Log`:
 
 ```
 Document ID | Received At | File Name | File Link | Document Type |
@@ -74,19 +70,17 @@ Sender / Company | Summary | Requested Action | Deadline | Urgency |
 Department | Submitted By | Status | Reviewed By | Review Note
 ```
 
-The Code nodes map to these strings verbatim. If a header differs, fix the
-header or the `COLS` map in the Code node — in both places, not one.
+The Code nodes map to these strings verbatim. If you rename a header, change the
+`COLS` map in the Code node to match — in both places, not one.
 
-## Step 4 — Credentials already wired (verify they are healthy)
+## Step 4 — Credentials wired
 
-| Node | Credential used | Id |
-|---|---|---|
-| Google Sheets (all) | Google Sheets OAuth2 API | `pHFYlfi7ARohCIG1` |
-| Upload original to Drive | Google Drive account | `ca58XKLdnQURD47g` |
-| Notify (urgent) / (normal) | Gmail OAuth2 API | `AYgjFyDnQF1fGC7w` |
-| OpenAI Chat Model | OpenAI account | `UttpnJOpJjqyZKw6` |
-
-Re-authorise any that show as expired.
+| Node | Credential | Id | Action needed |
+|---|---|---|---|
+| Google Sheets (all 4) | Google Sheets OAuth2 API | `pHFYlfi7ARohCIG1` | Confirm it is the `eyal9596@gmail.com` login; reconnect if not |
+| Upload original to Drive | Google Drive account | `ca58XKLdnQURD47g` | Same |
+| Notify (urgent) / (normal) | Gmail OAuth2 API | `AYgjFyDnQF1fGC7w` | Same |
+| OpenAI Chat Model | OpenAI account | `UttpnJOpJjqyZKw6` | Re-authorise if expired |
 
 ## Step 5 — Activate in order and test (SPEC.md section 8)
 
