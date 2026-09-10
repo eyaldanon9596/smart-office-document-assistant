@@ -1,0 +1,267 @@
+{
+  "name": "Smart Office — POST /process-document",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Webhook POST process-document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-200, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-document",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": { "id": "q7gpb9rI1PNWoNgh", "name": "Smart Office Shared Secret" }
+      }
+    },
+    {
+      "id": "decode",
+      "name": "Decode file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Turn the base64 payload into a binary property and, for TXT, into text.\nconst body = $json.body || {};\nconst fileName = body.file_name || 'document';\nconst mimeType = body.mime_type || 'application/octet-stream';\nconst buff = Buffer.from(body.file_base64 || '', 'base64');\nconst binary = await this.helpers.prepareBinaryData(buff, fileName, mimeType);\nconst received_at = new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z');\nlet text = '';\nif (mimeType === 'text/plain') text = buff.toString('utf8');\nreturn [{ json: { file_name: fileName, mime_type: mimeType, submitted_by: body.submitted_by || 'Not found', received_at, text }, binary: { data: binary } }];\n"
+      }
+    },
+    {
+      "id": "drive",
+      "name": "Upload original to Drive",
+      "notes": "Uploads to the 'Smart Office Intake' folder (eyal9596@gmail.com).",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [240, 0],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "name": "={{ $json.file_name }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN" },
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "ca58XKLdnQURD47g", "name": "Google Drive account" }
+      }
+    },
+    {
+      "id": "ifpdf",
+      "name": "Is it a PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [460, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_pdf", "leftValue": "={{ $('Decode file').first().json.mime_type }}", "rightValue": "application/pdf", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "extract",
+      "name": "Extract text from PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [680, -120],
+      "parameters": { "operation": "pdf", "binaryPropertyName": "data", "options": { "joinPages": true } }
+    },
+    {
+      "id": "assemble",
+      "name": "Assemble text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, -40],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Carry the extracted text past the Drive-upload node, which replaced $json.\n// PDF branch: text is on the Extract node output ($json.text).\n// TXT branch: text was decoded in 'Decode file'.\nconst meta = $('Decode file').first().json;\nlet text = (meta.text || '').trim();\nif (!text && $json && $json.text) text = String($json.text).trim();\nreturn [{ json: { file_name: meta.file_name, mime_type: meta.mime_type, submitted_by: meta.submitted_by, received_at: meta.received_at, text } }];\n"
+      }
+    },
+    {
+      "id": "iftext",
+      "name": "Has readable text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1120, -40],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_txt", "leftValue": "={{ (($json.text) || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1340, 80],
+      "parameters": { "modelName": "models/gemini-3.6-flash", "options": { "temperature": 0 } },
+      "credentials": {
+        "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" }
+      }
+    },
+    {
+      "id": "ie",
+      "name": "Information Extractor",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [1340, -120],
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"document_type\": { \"type\": \"string\", \"enum\": [\"invoice\",\"request\",\"report\",\"complaint\",\"contract\",\"quote\",\"other\"] },\n    \"sender_or_company\": { \"type\": \"string\" },\n    \"summary\": { \"type\": \"string\" },\n    \"requested_action\": { \"type\": \"string\" },\n    \"deadline\": { \"type\": \"string\" },\n    \"urgency\": { \"type\": \"string\", \"enum\": [\"Low\",\"Medium\",\"High\"] },\n    \"department\": { \"type\": \"string\", \"enum\": [\"Sales\",\"Finance\",\"Support\",\"HR\",\"Management\",\"General\"] }\n  },\n  \"required\": [\"document_type\",\"sender_or_company\",\"summary\",\"requested_action\",\"deadline\",\"urgency\",\"department\"]\n}",
+        "options": {
+          "systemPromptTemplate": "Extract the seven business fields. If a value is not present in the document, return exactly \"Not found\" for it, except requested_action, which must be exactly \"No action found\" when absent. Never guess. Use only the allowed enum values."
+        }
+      }
+    },
+    {
+      "id": "finalize",
+      "name": "Finalize fields and status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, -120],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// CONTRACT.md 2.1: 2+ missing business fields => Needs Review.\nconst ie = $json.output || $json;\nconst meta = $('Decode file').first().json;\nconst drive = $('Upload original to Drive').first().json;\nconst F = ['document_type','sender_or_company','summary','requested_action','deadline','urgency','department'];\nconst fields = {}; let missing = 0;\nfor (const k of F) {\n  let v = ie && ie[k];\n  if (v === undefined || v === null || String(v).trim() === '') v = (k === 'requested_action') ? 'No action found' : 'Not found';\n  if (v === 'Not found' || v === 'No action found') missing++;\n  fields[k] = v;\n}\nconst status = missing >= 2 ? 'Needs Review' : 'Processed';\nconst documentId = 'exec-' + ($execution.id || Date.now());\nconst fileLink = drive.webViewLink || drive.webContentLink || '';\nreturn [{ json: {\n  'Document ID': documentId,\n  'Received At': meta.received_at,\n  'File Name': meta.file_name,\n  'File Link': fileLink,\n  'Document Type': fields.document_type,\n  'Sender / Company': fields.sender_or_company,\n  'Summary': fields.summary,\n  'Requested Action': fields.requested_action,\n  'Deadline': fields.deadline,\n  'Urgency': fields.urgency,\n  'Department': fields.department,\n  'Submitted By': meta.submitted_by,\n  'Status': status,\n  'Reviewed By': '',\n  'Review Note': '',\n  _response: { status: 'processed', document_id: documentId, file_name: meta.file_name, file_link: fileLink, received_at: meta.received_at, fields, notification_sent: true },\n  _urgency: fields.urgency\n} }];\n"
+      }
+    },
+    {
+      "id": "append",
+      "name": "Append row to Processing Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1780, -120],
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM" },
+        "sheetName": { "__rl": true, "mode": "id", "value": "870850851" },
+        "columns": { "mappingMode": "autoMapInputData", "matchingColumns": [], "value": {} },
+        "options": { "handlingExtraData": "ignoreIt" }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "pHFYlfi7ARohCIG1", "name": "Google Sheets OAuth2 API" }
+      }
+    },
+    {
+      "id": "ifhigh",
+      "name": "Urgency is High?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2000, -120],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_high", "leftValue": "={{ $json._urgency }}", "rightValue": "High", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "gm_high",
+      "name": "Notify (urgent)",
+      "notes": "Both IF branches send mail per CONTRACT. Recipient: eyal9596@gmail.com.",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2220, -200],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "eyal9596@gmail.com",
+        "subject": "=Urgent document received: {{ $json['File Name'] }}",
+        "message": "={{ $json['Summary'] }}\n\nRequested action: {{ $json['Requested Action'] }}\nDeadline: {{ $json['Deadline'] }}\nDepartment: {{ $json['Department'] }}\nOpen the file: {{ $json['File Link'] }}",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" }
+      }
+    },
+    {
+      "id": "gm_norm",
+      "name": "Notify (normal)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2220, -40],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "eyal9596@gmail.com",
+        "subject": "=Document processed: {{ $json['File Name'] }}",
+        "message": "={{ $json['Summary'] }}\n\nRequested action: {{ $json['Requested Action'] }}\nDeadline: {{ $json['Deadline'] }}\nDepartment: {{ $json['Department'] }}\nOpen the file: {{ $json['File Link'] }}",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" }
+      }
+    },
+    {
+      "id": "resp_ok",
+      "name": "Respond processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2460, -120],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Finalize fields and status').first().json._response) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "resp_empty",
+      "name": "Respond EMPTY_DOCUMENT",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1340, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"error\",\n  \"error_code\": \"EMPTY_DOCUMENT\",\n  \"message\": \"Text extraction produced nothing.\"\n}",
+        "options": { "responseCode": 400 }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook POST process-document": { "main": [[{ "node": "Decode file", "type": "main", "index": 0 }]] },
+    "Decode file": { "main": [[{ "node": "Upload original to Drive", "type": "main", "index": 0 }]] },
+    "Upload original to Drive": { "main": [[{ "node": "Is it a PDF?", "type": "main", "index": 0 }]] },
+    "Is it a PDF?": {
+      "main": [
+        [{ "node": "Extract text from PDF", "type": "main", "index": 0 }],
+        [{ "node": "Assemble text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract text from PDF": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
+    "Assemble text": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
+    "Has readable text?": {
+      "main": [
+        [{ "node": "Information Extractor", "type": "main", "index": 0 }],
+        [{ "node": "Respond EMPTY_DOCUMENT", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Chat Model": { "ai_languageModel": [[{ "node": "Information Extractor", "type": "ai_languageModel", "index": 0 }]] },
+    "Information Extractor": { "main": [[{ "node": "Finalize fields and status", "type": "main", "index": 0 }]] },
+    "Finalize fields and status": { "main": [[{ "node": "Append row to Processing Log", "type": "main", "index": 0 }]] },
+    "Append row to Processing Log": { "main": [[{ "node": "Urgency is High?", "type": "main", "index": 0 }]] },
+    "Urgency is High?": {
+      "main": [
+        [{ "node": "Notify (urgent)", "type": "main", "index": 0 }],
+        [{ "node": "Notify (normal)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notify (urgent)": { "main": [[{ "node": "Respond processed", "type": "main", "index": 0 }]] },
+    "Notify (normal)": { "main": [[{ "node": "Respond processed", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

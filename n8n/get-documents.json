@@ -1,0 +1,68 @@
+{
+  "name": "Smart Office — GET /documents",
+  "nodes": [
+    {
+      "id": "wh_docs",
+      "name": "Webhook GET documents",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "documents",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": { "id": "q7gpb9rI1PNWoNgh", "name": "Smart Office Shared Secret" }
+      }
+    },
+    {
+      "id": "sheet_read",
+      "name": "Read Processing Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [240, 0],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "mode": "id", "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM" },
+        "sheetName": { "__rl": true, "mode": "id", "value": "870850851" },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "pHFYlfi7ARohCIG1", "name": "Google Sheets OAuth2 API" }
+      }
+    },
+    {
+      "id": "map_rows",
+      "name": "Map columns to contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Sheet header -> CONTRACT.md section 5 flat keys.\n// 'Read Processing Log' has Always Output Data on, so an empty sheet arrives as\n// a single {} item; filter those out and return [] for an empty log.\nconst COLS = {\n  document_id: 'Document ID',\n  received_at: 'Received At',\n  file_name: 'File Name',\n  file_link: 'File Link',\n  document_type: 'Document Type',\n  sender_or_company: 'Sender / Company',\n  summary: 'Summary',\n  requested_action: 'Requested Action',\n  deadline: 'Deadline',\n  urgency: 'Urgency',\n  department: 'Department',\n  status: 'Status',\n};\nconst rows = $input.all()\n  .map((i) => i.json || {})\n  .filter((r) => String(r['Document ID'] ?? '').trim() !== '');\nconst documents = rows.map((json) => {\n  const out = {};\n  for (const [key, col] of Object.entries(COLS)) {\n    const v = json[col];\n    out[key] = (v === undefined || v === null || v === '')\n      ? (key === 'requested_action' ? 'No action found' : 'Not found')\n      : v;\n  }\n  return out;\n});\nreturn [{ json: { documents } }];\n"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond with array",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [720, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.documents) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook GET documents": { "main": [[{ "node": "Read Processing Log", "type": "main", "index": 0 }]] },
+    "Read Processing Log": { "main": [[{ "node": "Map columns to contract", "type": "main", "index": 0 }]] },
+    "Map columns to contract": { "main": [[{ "node": "Respond with array", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

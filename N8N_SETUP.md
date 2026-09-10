@@ -1,22 +1,19 @@
 # N8N_SETUP.md — finishing and activating the Part 1 workflows
 
 There was no Part 1 specification in the repo, so these workflows were built to
-satisfy **`CONTRACT.md` only**. They are created **inactive**. The Header Auth
-credential, the `Document Processing Log` sheet, the Drive intake folder, the
-notify address and all node ids are filled in. What remains is confirming the
-n8n Google credentials use the `eyal9596@gmail.com` account, then activating.
-**Review before activating.**
+satisfy **`CONTRACT.md` only**. All three are now **active and tested end to
+end** against `https://psagot.app.n8n.cloud`. JSON snapshots are in `n8n/`.
 
 ## What was created
 
-| Workflow | ID | Webhook |
-|---|---|---|
-| Smart Office — GET /documents | `XgwL6Q0TUJvZuMSj` | `GET  /webhook/documents` |
-| Smart Office — POST /process-document | `xSdzr7O5RCANQwRg` | `POST /webhook/process-document` |
-| Smart Office — POST /review | `W4uXz3R6dympePtC` | `POST /webhook/review` |
+| Workflow | ID | Webhook | Verified |
+|---|---|---|---|
+| Smart Office — GET /documents | `XgwL6Q0TUJvZuMSj` | `GET  /webhook/documents` | 200 + `[]` on empty log; 403 without key |
+| Smart Office — POST /process-document | `xSdzr7O5RCANQwRg` | `POST /webhook/process-document` | 200, nested `fields`, Drive link, row appended, `notification_sent: true` |
+| Smart Office — POST /review | `W4uXz3R6dympePtC` | `POST /webhook/review` | 200 `{status: updated}`; 404 on unknown id |
 
-All three validate clean (`n8n_validate_workflow`, 0 errors). "Valid" only means
-the node graph is well-formed — it does **not** mean they run end to end yet.
+The FastAPI app was also run against the live instance (`USE_MOCK=false`):
+dashboard, detail page and upload all work through real n8n.
 
 ## Step 1 — Header Auth credential — DONE
 
@@ -80,38 +77,49 @@ The Code nodes map to these strings verbatim. If you rename a header, change the
 | Google Sheets (all 4) | Google Sheets OAuth2 API | `pHFYlfi7ARohCIG1` | Confirm it is the `eyal9596@gmail.com` login; reconnect if not |
 | Upload original to Drive | Google Drive account | `ca58XKLdnQURD47g` | Same |
 | Notify (urgent) / (normal) | Gmail OAuth2 API | `AYgjFyDnQF1fGC7w` | Same |
-| OpenAI Chat Model | OpenAI account | `UttpnJOpJjqyZKw6` | Re-authorise if expired |
+| Information Extractor's model | Google Gemini(PaLM) Api account | `3Bj78Dc8WJWZwwEF` | Working. See gap below. |
 
-## Step 5 — Activate in order and test (SPEC.md section 8)
+## Step 5 — Already activated and tested
 
-1. **GET /documents** first — read-only, cannot damage anything. Activate,
-   then in the app set `USE_MOCK=false` and confirm the dashboard loads real
-   rows. (Per-endpoint switching: `n8n_client.py` has one `if settings.use_mock`
-   line per function — for now the single flag flips all three, so bring the
-   workflows up together or split the flag if you want them staged.)
-2. **POST /process-document** — activate, upload a small PDF, confirm one new
-   row in the sheet and the file in Drive.
-3. **POST /review** — activate, mark that row reviewed, confirm the sheet
-   updates and a wrong id returns 404.
+All three are active. Verified live (see `PROMPTS.md` section 5 for the run log):
+
+- `GET /webhook/documents` → `403` without the key, `200` + `[]` with it on an
+  empty log, `200` + a flat array once rows exist.
+- `POST /webhook/process-document` with a TXT invoice → `200`, the CONTRACT
+  §3.2 body (seven fields nested under `fields`), a real Drive link, a row in
+  the sheet, `notification_sent: true`, and a notification email.
+- `POST /webhook/review` → `200 {"status":"updated",...}` and the row's Status
+  flips to `Reviewed`; an unknown id → `404` with the error body.
+
+To point the app at it: `.env` already has `USE_MOCK=false` and the matching
+`N8N_SECRET`.
+
+### Test data left behind
+
+- Sheet rows `exec-42` and `exec-50` are from test runs — delete them if you
+  want a clean log.
+- Two test files remain in `Smart Office Intake`
+  (`1GNXeuBjBfBQS916YJ6Zz0lMo1m8i7vNz`, `1oZzVhdHA_vCN5IdZqTPzj36E75NxXjoB`) —
+  the rest were cleaned up.
 
 ## Known gaps (need the Part 1 spec or a decision)
 
 - **DOCX text extraction is not implemented.** n8n's *Extract from File* has no
-  DOCX operation. The `/process-document` workflow extracts **PDF** (Extract
-  from File) and **TXT** (decoded directly in "Decode file"). A DOCX upload
-  currently reaches the extractor with empty text and returns `EMPTY_DOCUMENT`.
-  Options: a community DOCX node, or upload to Drive with conversion to a Google
-  Doc and export as `text/plain`.
+  DOCX operation. `/process-document` handles **PDF** (Extract from File) and
+  **TXT** (decoded in "Decode file"). A DOCX upload reaches the extractor with
+  empty text and returns `EMPTY_DOCUMENT`. Options: a community DOCX node, or
+  upload to Drive with conversion to a Google Doc and export as `text/plain`.
+- **AI model = Gemini, not OpenAI.** Both `openAiApi` credentials on the
+  instance return `401 Incorrect API key`. The Information Extractor was wired
+  to a **Google Gemini** chat model (`models/gemini-3.6-flash`) instead, which
+  works. Add a valid OpenAI key and swap the model node back if you prefer.
 - **No Workflow A / sub-workflow / Workflow C split.** `CONTRACT.md` refers to
-  that decomposition and to a **Google Drive trigger** intake path. Everything
-  here is folded into the three webhook workflows instead. The "Needs Review"
-  rule still lives in exactly one place — the "Finalize fields and status" Code
-  node — which is what section 2.1 requires.
+  that decomposition and a **Google Drive trigger** intake path. Everything is
+  folded into the three webhook workflows. The "Needs Review" rule still lives
+  in exactly one place — the "Finalize fields and status" Code node.
 - **`Submitted By` from the Drive path.** With no Drive trigger, every row's
   `Submitted By` comes from the webhook body (or `Not found`).
-- **`document_id`.** Built as `exec-<n8n execution id>` to match CONTRACT's
-  `exec-1043` style. Confirm that is the identifier you want as the stable key.
-- **AI model.** "OpenAI Chat Model" is set to `gpt-4o-mini`, temperature 0.
-  Change if you prefer another model or the Azure/Gemini credentials.
+- **`document_id`** is `exec-<n8n execution id>` (e.g. `exec-42`), matching
+  CONTRACT's `exec-1043` style. Confirm that is the key you want.
 - **Notifications.** Both IF branches send Gmail (per CONTRACT). Subjects differ
   by urgency; bodies are the summary + action + deadline + file link.

@@ -52,9 +52,55 @@ n8n instance.
 
 ## 4. Part 1 — n8n workflows
 
-No Part 1 spec document exists. The workflows were built to satisfy `CONTRACT.md`
-only, wired to the Google Sheets / Drive / Gmail / OpenAI credentials already on
-the instance, and left **inactive**. Every value that needs a real id is a
-literal placeholder (`REPLACE_WITH_SHEET_ID`, `REPLACE_WITH_DRIVE_FOLDER_ID`,
-`REPLACE_WITH_NOTIFY_EMAIL`) and is listed in `N8N_SETUP.md`. They must be
-reviewed before activation.
+No Part 1 spec document exists. Three webhook workflows were built to satisfy
+`CONTRACT.md` only (not the Workflow A / sub-workflow / Workflow C + Drive-trigger
+decomposition it mentions). JSON snapshots are in `n8n/`; details and gaps in
+`N8N_SETUP.md`.
+
+### Built via the n8n MCP
+
+- **GET /documents** — Webhook (Header Auth) → Google Sheets read → Code (map
+  sheet headers to CONTRACT flat keys) → Respond.
+- **POST /process-document** — Webhook → Code (base64 → binary, TXT → text) →
+  Drive upload → IF pdf → Extract from File / carry-through → Code "Assemble
+  text" → IF has-text → Information Extractor (Gemini) → Code "Finalize" (fills
+  `Not found` / `No action found`, applies the §2.1 Needs Review rule, builds the
+  row + response) → Sheets append → IF urgency High → Gmail (both branches) →
+  Respond. Empty text → `EMPTY_DOCUMENT` 400.
+- **POST /review** — Webhook → Sheets read → Code "Find matching row" (match on
+  `document_id` only) → IF found → Sheets update / Respond `updated`, else
+  Respond `404`.
+
+### Resources created (account `eyal9596@gmail.com`)
+
+- Header Auth credential `Smart Office Shared Secret` (`q7gpb9rI1PNWoNgh`).
+- Spreadsheet `Document Processing Log` with the 15 CONTRACT columns
+  (`1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM`, tab gid `870850851`).
+- Folder `Smart Office Intake` (`19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN`).
+
+### Bugs found and fixed while testing live
+
+1. **`GET /documents` returned an empty body, not `[]`, on an empty sheet.**
+   Google Sheets read emits 0 items for a header-only sheet and n8n skips every
+   downstream node. Fix: `alwaysOutputData` on the read node + the Code node
+   filters the sentinel `{}` item and always returns `{ documents: [...] }`,
+   which the Respond node stringifies.
+2. **`/process-document` always hit `EMPTY_DOCUMENT` for TXT.** The Drive-upload
+   node replaces `$json`, so `$json.text` from "Decode file" was gone by the
+   next node. Fix: a "Assemble text" Code node after the pdf/non-pdf split that
+   pulls text from `$('Decode file')` (TXT) or the Extract output (PDF).
+3. **Both OpenAI credentials return `401 Incorrect API key`.** Swapped the
+   OpenAI Chat Model for a Google Gemini chat model on the same Information
+   Extractor. Then `gemini-1.5-flash` and `gemini-2.5-flash` 404'd (retired);
+   `models/gemini-3.6-flash` works.
+4. **Sheet tab name.** Workflows first used `sheetName` by name "Document
+   Processing Log"; the actual tab was "Untitled" (later renamed). Switched all
+   Sheets nodes to the stable gid `870850851`.
+
+### Verified live
+
+`403` without the key. `GET /documents` → `[]` then a flat array. TXT invoice
+through `POST /process-document` → `200` with the seven fields nested under
+`fields`, a real Drive link, a sheet row, `notification_sent: true`. `POST
+/review` → `200 {"status":"updated"}` and the row flips to `Reviewed`; unknown id
+→ `404`. The FastAPI app was also exercised end to end with `USE_MOCK=false`.
