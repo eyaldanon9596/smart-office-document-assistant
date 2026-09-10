@@ -112,13 +112,66 @@
       }
     },
     {
+      "id": "ocr",
+      "name": "OCR the scan (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000,
+      "position": [1120, 60],
+      "parameters": {
+        "resource": "document",
+        "operation": "analyze",
+        "modelId": { "__rl": true, "mode": "id", "value": "models/gemini-3.6-flash" },
+        "text": "This is a scanned document with no text layer. Transcribe ALL text you can see, exactly as written: every heading, line item, description, quantity, unit price, amount, total, tax, date, invoice or PO number, and every company name and address. Keep the natural reading order. Output plain text only - no commentary, no markdown, no explanation.",
+        "inputType": "binary",
+        "binaryPropertyName": "data",
+        "options": { "maxOutputTokens": 4096 }
+      },
+      "credentials": {
+        "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" }
+      }
+    },
+    {
+      "id": "usebest",
+      "name": "Use best text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 20],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Prefer the extracted text layer; fall back to the OCR transcription.\nconst asm = $('Assemble text').first();\nlet text = String((asm.json && asm.json.text) || '').trim();\nif (!text) {\n  const o = $json || {};\n  const parts = o.content && o.content.parts;\n  text = String(\n    (parts && parts[0] && parts[0].text) ||\n    (typeof o.content === 'string' ? o.content : '') ||\n    o.text || o.response || ''\n  ).trim();\n}\nconst meta = asm.json;\nreturn [{ json: {\n  file_name: meta.file_name,\n  mime_type: meta.mime_type,\n  submitted_by: meta.submitted_by,\n  received_at: meta.received_at,\n  text,\n}, binary: asm.binary }];\n"
+      }
+    },
+    {
+      "id": "stillnotext",
+      "name": "Still no text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1560, 20],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_final", "leftValue": "={{ ($json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
       "id": "ie",
       "name": "Information Extractor",
       "type": "@n8n/n8n-nodes-langchain.informationExtractor",
       "typeVersion": 1.2,
-      "position": [1340, -120],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000,
+      "position": [1560, -120],
       "parameters": {
-        "text": "={{ $('Assemble text').first().json.text }}",
+        "text": "={{ $('Use best text').first().json.text }}",
         "schemaType": "manual",
         "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"document_type\": { \"type\": \"string\", \"enum\": [\"invoice\",\"request\",\"report\",\"complaint\",\"contract\",\"quote\",\"other\"] },\n    \"sender_or_company\": { \"type\": \"string\" },\n    \"summary\": { \"type\": \"string\" },\n    \"requested_action\": { \"type\": \"string\" },\n    \"deadline\": { \"type\": \"string\" },\n    \"urgency\": { \"type\": \"string\", \"enum\": [\"Low\",\"Medium\",\"High\"] },\n    \"department\": { \"type\": \"string\", \"enum\": [\"Sales\",\"Finance\",\"Support\",\"HR\",\"Management\",\"General\"] }\n  },\n  \"required\": [\"document_type\",\"sender_or_company\",\"summary\",\"requested_action\",\"deadline\",\"urgency\",\"department\"]\n}",
         "options": {
@@ -242,14 +295,22 @@
       ]
     },
     "Extract text from PDF": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
-    "Assemble text": { "main": [[{ "node": "Upload original to Drive", "type": "main", "index": 0 }]] },
-    "Upload original to Drive": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
+    "Assemble text": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
     "Has readable text?": {
       "main": [
-        [{ "node": "Information Extractor", "type": "main", "index": 0 }],
+        [{ "node": "Use best text", "type": "main", "index": 0 }],
+        [{ "node": "OCR the scan (Gemini)", "type": "main", "index": 0 }]
+      ]
+    },
+    "OCR the scan (Gemini)": { "main": [[{ "node": "Use best text", "type": "main", "index": 0 }]] },
+    "Use best text": { "main": [[{ "node": "Still no text?", "type": "main", "index": 0 }]] },
+    "Still no text?": {
+      "main": [
+        [{ "node": "Upload original to Drive", "type": "main", "index": 0 }],
         [{ "node": "Respond EMPTY_DOCUMENT", "type": "main", "index": 0 }]
       ]
     },
+    "Upload original to Drive": { "main": [[{ "node": "Information Extractor", "type": "main", "index": 0 }]] },
     "Gemini Chat Model": { "ai_languageModel": [[{ "node": "Information Extractor", "type": "ai_languageModel", "index": 0 }]] },
     "Information Extractor": { "main": [[{ "node": "Finalize fields and status", "type": "main", "index": 0 }]] },
     "Finalize fields and status": { "main": [[{ "node": "Append row to Processing Log", "type": "main", "index": 0 }]] },

@@ -169,3 +169,24 @@ Requested: a dashboard button that imports invoice attachments from the last
   label → summary). A full green import needs an invoice email in the window
   that isn't already labelled; the one test email got labelled on the
   pre-fix run.
+
+## 7. OCR for scanned PDFs (in `/process-document`)
+
+Signed / photographed invoices often have no text layer, so *Extract from File*
+returns nothing → `EMPTY_DOCUMENT`. Added an OCR fallback:
+
+- Reordered the pipeline so text detection happens before the Drive upload
+  (which strips the binary): `Assemble text → Has readable text?`.
+- `Has readable text?` **false** → **OCR the scan (Gemini)** — the
+  `@n8n/n8n-nodes-langchain.googleGemini` node, resource `document`, operation
+  `analyze`, `inputType: binary`, model `gemini-3.6-flash`, prompt "transcribe
+  all text verbatim". `onError: continueRegularOutput` + `retryOnFail` so a rate
+  limit or a bad file degrades to `EMPTY_DOCUMENT` rather than a 500.
+- **Use best text** merges: the extracted text layer if present, else the OCR
+  transcription (which lands at `content.parts[0].text` — a first attempt
+  stringified the wrong node and produced `"[object Object]"`).
+- **Still no text?** — only now, if both are empty, respond `EMPTY_DOCUMENT`.
+- **Verified**: an image-only PDF (JPEG page, no text operators) →
+  `200`, seven fields extracted correctly (Contoso Cleaning, invoice,
+  672.00 GBP, 22 April 2026, Finance).
+- DOCX still unsupported — no text layer *and* no page images to OCR.

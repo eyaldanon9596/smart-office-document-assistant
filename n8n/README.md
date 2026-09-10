@@ -27,8 +27,9 @@ are extras:
 ## Status
 
 Working: header auth, `GET /documents` (incl. `[]` for an empty log), the full
-`POST /process-document` pipeline (decode → Drive upload → text extract → AI
-extract → sheet append → Gmail → response), `POST /review` (200 + 404).
+`POST /process-document` pipeline (decode → text extract → **OCR fallback via
+Gemini for scanned PDFs** → Drive upload → AI extract → sheet append → Gmail →
+response), `POST /review` (200 + 404).
 
 ## Credentials the nodes reference (by id)
 

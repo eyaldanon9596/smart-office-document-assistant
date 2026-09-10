@@ -106,11 +106,15 @@ To point the app at it: `.env` already has `USE_MOCK=false` and the matching
 
 ## Known gaps (need the Part 1 spec or a decision)
 
+- **Scanned / image-only PDFs — handled by OCR.** If *Extract from File* finds
+  no text layer, `/process-document` sends the file to **Gemini → Analyze
+  Document** ("OCR the scan"), which transcribes the page images; the pipeline
+  then continues on that text. `EMPTY_DOCUMENT` now only fires when both the text
+  layer and the OCR come back empty.
 - **DOCX text extraction is not implemented.** n8n's *Extract from File* has no
-  DOCX operation. `/process-document` handles **PDF** (Extract from File) and
-  **TXT** (decoded in "Decode file"). A DOCX upload reaches the extractor with
-  empty text and returns `EMPTY_DOCUMENT`. Options: a community DOCX node, or
-  upload to Drive with conversion to a Google Doc and export as `text/plain`.
+  DOCX operation, and a DOCX has no page images for the OCR path either. A DOCX
+  upload returns `EMPTY_DOCUMENT`. Options: a community DOCX node, or upload to
+  Drive with conversion to a Google Doc and export as `text/plain`.
 - **AI model = Gemini, not OpenAI.** Both `openAiApi` credentials on the
   instance return `401 Incorrect API key`. The Information Extractor was wired
   to a **Google Gemini** chat model (`models/gemini-3.6-flash`) instead, which
