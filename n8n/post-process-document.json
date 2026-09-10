@@ -81,7 +81,7 @@
       "position": [900, -40],
       "parameters": {
         "language": "javaScript",
-        "jsCode": "// Carry the extracted text past the Drive-upload node, which replaced $json.\n// PDF branch: text is on the Extract node output ($json.text).\n// TXT branch: text was decoded in 'Decode file'.\nconst meta = $('Decode file').first().json;\nlet text = (meta.text || '').trim();\nif (!text && $json && $json.text) text = String($json.text).trim();\nreturn [{ json: { file_name: meta.file_name, mime_type: meta.mime_type, submitted_by: meta.submitted_by, received_at: meta.received_at, text } }];\n"
+        "jsCode": "// Runs after the pdf/txt split, before the Drive upload.\n// PDF branch: text is on the Extract node output ($json.text).\n// TXT branch: text was decoded in 'Decode file'.\n// Re-attach the original file binary so the Drive upload still has it.\nconst dec = $('Decode file').first();\nconst meta = dec.json;\nlet text = (meta.text || '').trim();\nif (!text && $json && $json.text) text = String($json.text).trim();\nreturn [{ json: { file_name: meta.file_name, mime_type: meta.mime_type, submitted_by: meta.submitted_by, received_at: meta.received_at, text }, binary: dec.binary }];\n"
       }
     },
     {
@@ -94,7 +94,7 @@
         "conditions": {
           "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
           "conditions": [
-            { "id": "c_txt", "leftValue": "={{ (($json.text) || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+            { "id": "c_txt", "leftValue": "={{ ($('Assemble text').first().json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
           ],
           "combinator": "and"
         }
@@ -118,7 +118,7 @@
       "typeVersion": 1.2,
       "position": [1340, -120],
       "parameters": {
-        "text": "={{ $json.text }}",
+        "text": "={{ $('Assemble text').first().json.text }}",
         "schemaType": "manual",
         "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"document_type\": { \"type\": \"string\", \"enum\": [\"invoice\",\"request\",\"report\",\"complaint\",\"contract\",\"quote\",\"other\"] },\n    \"sender_or_company\": { \"type\": \"string\" },\n    \"summary\": { \"type\": \"string\" },\n    \"requested_action\": { \"type\": \"string\" },\n    \"deadline\": { \"type\": \"string\" },\n    \"urgency\": { \"type\": \"string\", \"enum\": [\"Low\",\"Medium\",\"High\"] },\n    \"department\": { \"type\": \"string\", \"enum\": [\"Sales\",\"Finance\",\"Support\",\"HR\",\"Management\",\"General\"] }\n  },\n  \"required\": [\"document_type\",\"sender_or_company\",\"summary\",\"requested_action\",\"deadline\",\"urgency\",\"department\"]\n}",
         "options": {
@@ -234,8 +234,7 @@
   ],
   "connections": {
     "Webhook POST process-document": { "main": [[{ "node": "Decode file", "type": "main", "index": 0 }]] },
-    "Decode file": { "main": [[{ "node": "Upload original to Drive", "type": "main", "index": 0 }]] },
-    "Upload original to Drive": { "main": [[{ "node": "Is it a PDF?", "type": "main", "index": 0 }]] },
+    "Decode file": { "main": [[{ "node": "Is it a PDF?", "type": "main", "index": 0 }]] },
     "Is it a PDF?": {
       "main": [
         [{ "node": "Extract text from PDF", "type": "main", "index": 0 }],
@@ -243,7 +242,8 @@
       ]
     },
     "Extract text from PDF": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
-    "Assemble text": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
+    "Assemble text": { "main": [[{ "node": "Upload original to Drive", "type": "main", "index": 0 }]] },
+    "Upload original to Drive": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
     "Has readable text?": {
       "main": [
         [{ "node": "Information Extractor", "type": "main", "index": 0 }],
