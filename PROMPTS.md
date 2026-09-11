@@ -190,3 +190,43 @@ returns nothing → `EMPTY_DOCUMENT`. Added an OCR fallback:
   `200`, seven fields extracted correctly (Contoso Cleaning, invoice,
   672.00 GBP, 22 April 2026, Finance).
 - DOCX still unsupported — no text layer *and* no page images to OCR.
+
+## 8. Visual redesign, via the `ui-ux-pro-max` skill
+
+Installed with `npx skills add nextlevelbuilder/ui-ux-pro-max-skill --skill
+ui-ux-pro-max --agent claude-code` (files at `.claude/skills/ui-ux-pro-max/`,
+not committed — it's a local tool, not part of the app). Its own installer
+flagged a "Gen: High Risk" rating against Socket's 0 alerts / Snyk's Low Risk;
+a manual read of its ~4,000 lines of scripts found only stdlib imports, no
+network/exec/eval, writes confined to its own directory — kept it.
+
+The skill wasn't hot-loadable mid-session (needs a CLI restart to register as
+an invocable `/skill`), so its `search.py --design-system` was run directly:
+
+- First query ("document processing admin console AP workflow") returned a
+  mismatched marketing-landing pattern (Hero, Client Logos, Contact Sales) and
+  a Chinese-locale font — discarded per the skill's own verification step
+  ("retry once with a narrower rewrite... state no verified match" rather than
+  keep an off-topic result).
+- Re-queried against `products.csv` directly to find the right taxonomy entry
+  (`Productivity Tool` — collaboration/task/workflow), then re-ran
+  `--design-system` with that framing. Verified match this time: **Flat
+  Design** style (2D, no shadows, "Best For: dashboards, B2B, corporate"),
+  a **teal + orange** palette, **Plus Jakarta Sans** typography. The
+  landing-page "Pattern" section still doesn't apply — this app has no
+  marketing funnel — so it was dropped; only the style/colour/type/effects
+  tokens were used.
+- Supplemental `--domain ux` queries validated existing choices (colour-only
+  status is already avoided — text labels present) and surfaced two easy
+  wins applied here: `role="status"` on the four dynamic message regions
+  (upload error, review, analysis, email-scan) for screen-reader announcement
+  of async state changes, and `white-space: nowrap` hardening on badges/status
+  chips. A third finding — bulk row selection for the dashboard table — was
+  **not** implemented; noted as a follow-up, out of scope for a styling pass.
+- Applied at the token level in `static/style.css` (`:root` variables), so
+  every component already referencing `var(--accent)` etc. picked it up
+  without per-component edits. One deliberate rule: **teal is every standard
+  app action; orange (`--ai`) is reserved for AI-assisted moments** — the
+  "Analyze this document" button and the AI briefing panel's left border and
+  headings — so the accent colour itself signals who produced that part of
+  the screen.

@@ -10,3 +10,7 @@ venv/
 # local scratch / screenshots
 Temp/
 .playwright-mcp/
+
+# local Claude Code skills (installed tooling, not project source)
+.claude/skills/
+skills-lock.json

@@ -35,7 +35,7 @@
 <section class="analysis-box">
   <div class="analysis-head">
     <h2>AI analysis</h2>
-    <button type="button" id="analyze-btn" class="btn"
+    <button type="button" id="analyze-btn" class="btn btn-ai"
             data-document-id="{{ doc.document_id }}">Analyze this document</button>
   </div>
   <p class="analysis-hint">
@@ -43,7 +43,7 @@
     document is, who the sender is, and what each line item means. Takes up to a
     minute. This does not change anything in the log.
   </p>
-  <div id="analysis-status" class="inline-message" hidden></div>
+  <div id="analysis-status" class="inline-message" role="status" hidden></div>
   <div id="analysis-output" class="analysis-output" hidden></div>
 </section>
 
@@ -61,7 +61,7 @@
       <small id="note-count" class="note-count">0 / 200</small>
     </label>
 
-    <p id="review-message" class="inline-message" hidden></p>
+    <p id="review-message" class="inline-message" role="status" hidden></p>
 
     <div class="review-actions">
       <button type="submit" class="btn btn-primary" data-status="Reviewed">Mark as reviewed</button>

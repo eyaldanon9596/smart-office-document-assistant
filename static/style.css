@@ -1,11 +1,19 @@
+/* Design system: Flat Design for productivity/B2B tools, teal + orange,
+   Plus Jakarta Sans. Teal is every standard app action; orange is reserved
+   for AI-assisted moments (the Analyze button, the AI briefing) so a glance
+   at the accent colour tells you who produced that part of the screen. */
 :root {
-  --ink: #1c2430;
-  --muted: #5b6675;
-  --line: #dfe3e9;
-  --bg: #f5f6f8;
+  --ink: #0f172a;
+  --muted: #55707a;
+  --line: #cfe6e1;
+  --bg: #f3faf8;
   --card: #ffffff;
-  --accent: #1f5fbf;
-  --accent-dark: #17488f;
+  --accent: #0d9488;
+  --accent-dark: #0f766e;
+  --accent-soft: #e6f6f3;
+  --ai: #ea580c;
+  --ai-dark: #c2410c;
+  --ai-soft: #fdf1e9;
   --high-bg: #fbe4e2; --high-ink: #8a1c12; --high-line: #e79b92;
   --med-bg: #fdf0d9; --med-ink: #7a5312; --med-line: #e6c078;
   --low-bg: #e4f1e6; --low-ink: #1f5d33; --low-line: #9bcaa6;
@@ -16,7 +24,7 @@
 [hidden] { display: none !important; }
 body {
   margin: 0;
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.55 "Plus Jakarta Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
   background: var(--bg);
 }
@@ -45,8 +53,10 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 0.75rem; }
 .btn:hover { border-color: var(--muted); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-dark); }
-.btn-primary:disabled { background: #9db8dc; border-color: #9db8dc; cursor: not-allowed; }
+.btn-primary:disabled { background: #9cc9c2; border-color: #9cc9c2; cursor: not-allowed; }
 .btn-quiet { background: transparent; }
+.btn-ai { border-color: var(--ai); color: var(--ai-dark); background: var(--ai-soft); }
+.btn-ai:hover { background: var(--ai); color: #fff; border-color: var(--ai); }
 
 .field { display: block; margin: 1rem 0; }
 .field > span { display: block; margin-bottom: 0.3rem; font-weight: 600; }
@@ -63,7 +73,7 @@ textarea { resize: vertical; }
   border: 2px dashed var(--line); border-radius: 10px; padding: 2rem 1rem;
   text-align: center; background: var(--card); margin: 1.25rem 0;
 }
-.dropzone.over { border-color: var(--accent); background: #eef4fc; }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone input[type="file"] { display: block; margin: 0 auto 0.75rem; }
 .dropzone-hint { color: var(--muted); margin: 0.25rem 0; }
 .link-like { color: var(--accent); }
@@ -80,15 +90,16 @@ textarea { resize: vertical; }
 .processing {
   display: flex; gap: 1rem; align-items: center;
   margin-top: 1.5rem; padding: 1.1rem 1.25rem;
-  background: #eef4fc; border: 1px solid #bcd4f2; border-radius: 10px;
+  background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px;
 }
 .processing-title { font-weight: 700; margin: 0; }
 .processing-note { margin: 0.2rem 0 0; color: var(--muted); }
 .spinner {
   width: 34px; height: 34px; flex: none; border-radius: 50%;
-  border: 4px solid #c7dbf5; border-top-color: var(--accent);
+  border: 4px solid #bfe6df; border-top-color: var(--accent);
   animation: spin 0.9s linear infinite;
 }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Dashboard ---- */
@@ -109,7 +120,7 @@ table { width: 100%; border-collapse: collapse; background: var(--card); }
 th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); }
 th { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .doc-row { cursor: pointer; }
-.doc-row:hover { background: #f0f4fa; }
+.doc-row:hover { background: var(--accent-soft); }
 .col-received { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
 .row-sub { display: block; font-size: 0.85rem; color: var(--muted); }
 
@@ -121,21 +132,22 @@ th { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; colo
 /* ---- Badges: never colour alone, the word is always shown ---- */
 .badge {
   display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px;
-  font-size: 0.82rem; font-weight: 700; border: 1px solid;
+  font-size: 0.82rem; font-weight: 700; border: 1px solid; white-space: nowrap;
 }
 .badge-lg { font-size: 0.95rem; padding: 0.3rem 0.8rem; }
 .badge-high { background: var(--high-bg); color: var(--high-ink); border-color: var(--high-line); }
 .badge-medium { background: var(--med-bg); color: var(--med-ink); border-color: var(--med-line); }
 .badge-low { background: var(--low-bg); color: var(--low-ink); border-color: var(--low-line); }
-.badge-unknown { background: #eceff3; color: var(--muted); border-color: var(--line); }
+.badge-unknown { background: #eef2f1; color: var(--muted); border-color: var(--line); }
 
 .status {
   display: inline-block; padding: 0.12rem 0.5rem; border-radius: 6px;
-  font-size: 0.82rem; font-weight: 600; background: #eceff3; color: var(--ink);
+  font-size: 0.82rem; font-weight: 600; background: #eef2f1; color: var(--ink);
+  white-space: nowrap;
 }
 .status-needs-review { background: var(--med-bg); color: var(--med-ink); }
 .status-reviewed { background: var(--low-bg); color: var(--low-ink); }
-.status-processed { background: #e7edf6; color: var(--accent-dark); }
+.status-processed { background: var(--accent-soft); color: var(--accent-dark); }
 
 /* ---- Detail ---- */
 .fields { margin: 1.25rem 0; }
@@ -149,6 +161,7 @@ th { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; colo
   margin-top: 2rem; padding: 1.25rem 1.5rem;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
 }
+.analysis-box { border-left: 3px solid var(--ai); }
 .review-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
 
 .analysis-head {
@@ -161,7 +174,7 @@ th { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; colo
   margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line);
 }
 .analysis-output h4 {
-  margin: 1.1rem 0 0.35rem; font-size: 0.95rem; color: var(--accent-dark);
+  margin: 1.1rem 0 0.35rem; font-size: 0.95rem; color: var(--ai-dark);
 }
 .analysis-output h4:first-child { margin-top: 0; }
 .analysis-output p { margin: 0.35rem 0; }
