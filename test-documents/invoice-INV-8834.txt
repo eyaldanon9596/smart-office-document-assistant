@@ -1,0 +1,11 @@
+INVOICE #INV-8834
+From: Solaris Office Supplies Ltd
+To: Psagot Finance Department
+Date: 17 September 2026
+Payment due: 19 September 2026
+
+Description: 25x Ergonomic desk chairs, model ErgoFlex Pro
+Amount due: 6,875.00 ILS
+
+Please approve and pay invoice INV-8834 by the due date to avoid a late fee.
+Contact: billing@solaris-office.example
