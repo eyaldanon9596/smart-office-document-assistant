@@ -6,7 +6,10 @@
       "name": "Webhook POST process-document",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [-200, 0],
+      "position": [
+        -200,
+        0
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "process-document",
@@ -15,7 +18,10 @@
         "options": {}
       },
       "credentials": {
-        "httpHeaderAuth": { "id": "q7gpb9rI1PNWoNgh", "name": "Smart Office Shared Secret" }
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Smart Office Shared Secret"
+        }
       }
     },
     {
@@ -23,7 +29,10 @@
       "name": "Decode file",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [20, 0],
+      "position": [
+        20,
+        0
+      ],
       "parameters": {
         "language": "javaScript",
         "jsCode": "// Turn the base64 payload into a binary property and, for TXT, into text.\nconst body = $json.body || {};\nconst fileName = body.file_name || 'document';\nconst mimeType = body.mime_type || 'application/octet-stream';\nconst buff = Buffer.from(body.file_base64 || '', 'base64');\nconst binary = await this.helpers.prepareBinaryData(buff, fileName, mimeType);\nconst received_at = new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z');\nlet text = '';\nif (mimeType === 'text/plain') text = buff.toString('utf8');\nreturn [{ json: { file_name: fileName, mime_type: mimeType, submitted_by: body.submitted_by || 'Not found', received_at, text }, binary: { data: binary } }];\n"
@@ -35,18 +44,32 @@
       "notes": "Uploads to the 'Smart Office Intake' folder (eyal9596@gmail.com).",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [240, 0],
+      "position": [
+        240,
+        0
+      ],
       "parameters": {
         "resource": "file",
         "operation": "upload",
         "name": "={{ $json.file_name }}",
-        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
-        "folderId": { "__rl": true, "mode": "id", "value": "19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN" },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "19L3PCxpKXYVg9EKXHKys2PGy4Q0rpUwN"
+        },
         "inputDataFieldName": "data",
         "options": {}
       },
       "credentials": {
-        "googleDriveOAuth2Api": { "id": "ca58XKLdnQURD47g", "name": "Google Drive account" }
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
       }
     },
     {
@@ -54,12 +77,27 @@
       "name": "Is it a PDF?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [460, 0],
+      "position": [
+        460,
+        0
+      ],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
-            { "id": "c_pdf", "leftValue": "={{ $('Decode file').first().json.mime_type }}", "rightValue": "application/pdf", "operator": { "type": "string", "operation": "equals" } }
+            {
+              "id": "c_pdf",
+              "leftValue": "={{ $('Decode file').first().json.mime_type }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
           ],
           "combinator": "and"
         }
@@ -70,15 +108,27 @@
       "name": "Extract text from PDF",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
-      "position": [680, -120],
-      "parameters": { "operation": "pdf", "binaryPropertyName": "data", "options": { "joinPages": true } }
+      "position": [
+        680,
+        -120
+      ],
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {
+          "joinPages": true
+        }
+      }
     },
     {
       "id": "assemble",
       "name": "Assemble text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, -40],
+      "position": [
+        900,
+        -40
+      ],
       "parameters": {
         "language": "javaScript",
         "jsCode": "// Runs after the pdf/txt split, before the Drive upload.\n// PDF branch: text is on the Extract node output ($json.text).\n// TXT branch: text was decoded in 'Decode file'.\n// Re-attach the original file binary so the Drive upload still has it.\nconst dec = $('Decode file').first();\nconst meta = dec.json;\nlet text = (meta.text || '').trim();\nif (!text && $json && $json.text) text = String($json.text).trim();\nreturn [{ json: { file_name: meta.file_name, mime_type: meta.mime_type, submitted_by: meta.submitted_by, received_at: meta.received_at, text }, binary: dec.binary }];\n"
@@ -89,12 +139,28 @@
       "name": "Has readable text?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [1120, -40],
+      "position": [
+        1120,
+        -40
+      ],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
-            { "id": "c_txt", "leftValue": "={{ ($('Assemble text').first().json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+            {
+              "id": "c_txt",
+              "leftValue": "={{ ($('Assemble text').first().json.text || '').trim().length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
           ],
           "combinator": "and"
         }
@@ -105,10 +171,21 @@
       "name": "Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [1340, 80],
-      "parameters": { "modelName": "models/gemini-3.6-flash", "options": { "temperature": 0 } },
+      "position": [
+        1340,
+        80
+      ],
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {
+          "temperature": 0
+        }
+      },
       "credentials": {
-        "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" }
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
       }
     },
     {
@@ -120,18 +197,30 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 20000,
-      "position": [1120, 60],
+      "position": [
+        1120,
+        60
+      ],
       "parameters": {
         "resource": "document",
         "operation": "analyze",
-        "modelId": { "__rl": true, "mode": "id", "value": "models/gemini-3.6-flash" },
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "models/gemini-3.6-flash"
+        },
         "text": "This is a scanned document with no text layer. Transcribe ALL text you can see, exactly as written: every heading, line item, description, quantity, unit price, amount, total, tax, date, invoice or PO number, and every company name and address. Keep the natural reading order. Output plain text only - no commentary, no markdown, no explanation.",
         "inputType": "binary",
         "binaryPropertyName": "data",
-        "options": { "maxOutputTokens": 4096 }
+        "options": {
+          "maxOutputTokens": 4096
+        }
       },
       "credentials": {
-        "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" }
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
       }
     },
     {
@@ -139,7 +228,10 @@
       "name": "Use best text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 20],
+      "position": [
+        1340,
+        20
+      ],
       "parameters": {
         "language": "javaScript",
         "jsCode": "// Prefer the extracted text layer; fall back to the OCR transcription.\nconst asm = $('Assemble text').first();\nlet text = String((asm.json && asm.json.text) || '').trim();\nif (!text) {\n  const o = $json || {};\n  const parts = o.content && o.content.parts;\n  text = String(\n    (parts && parts[0] && parts[0].text) ||\n    (typeof o.content === 'string' ? o.content : '') ||\n    o.text || o.response || ''\n  ).trim();\n}\nconst meta = asm.json;\nreturn [{ json: {\n  file_name: meta.file_name,\n  mime_type: meta.mime_type,\n  submitted_by: meta.submitted_by,\n  received_at: meta.received_at,\n  text,\n}, binary: asm.binary }];\n"
@@ -150,12 +242,28 @@
       "name": "Still no text?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [1560, 20],
+      "position": [
+        1560,
+        20
+      ],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
-            { "id": "c_final", "leftValue": "={{ ($json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+            {
+              "id": "c_final",
+              "leftValue": "={{ ($json.text || '').trim().length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
           ],
           "combinator": "and"
         }
@@ -169,7 +277,10 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 20000,
-      "position": [1560, -120],
+      "position": [
+        1560,
+        -120
+      ],
       "parameters": {
         "text": "={{ $('Use best text').first().json.text }}",
         "schemaType": "manual",
@@ -184,7 +295,10 @@
       "name": "Finalize fields and status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, -120],
+      "position": [
+        1560,
+        -120
+      ],
       "parameters": {
         "language": "javaScript",
         "jsCode": "// CONTRACT.md 2.1: 2+ missing business fields => Needs Review.\nconst ie = $json.output || $json;\nconst meta = $('Decode file').first().json;\nconst drive = $('Upload original to Drive').first().json;\nconst F = ['document_type','sender_or_company','summary','requested_action','deadline','urgency','department'];\nconst fields = {}; let missing = 0;\nfor (const k of F) {\n  let v = ie && ie[k];\n  if (v === undefined || v === null || String(v).trim() === '') v = (k === 'requested_action') ? 'No action found' : 'Not found';\n  if (v === 'Not found' || v === 'No action found') missing++;\n  fields[k] = v;\n}\nconst status = missing >= 2 ? 'Needs Review' : 'Processed';\nconst documentId = 'exec-' + ($execution.id || Date.now());\nconst fileLink = drive.webViewLink || drive.webContentLink || '';\nreturn [{ json: {\n  'Document ID': documentId,\n  'Received At': meta.received_at,\n  'File Name': meta.file_name,\n  'File Link': fileLink,\n  'Document Type': fields.document_type,\n  'Sender / Company': fields.sender_or_company,\n  'Summary': fields.summary,\n  'Requested Action': fields.requested_action,\n  'Deadline': fields.deadline,\n  'Urgency': fields.urgency,\n  'Department': fields.department,\n  'Submitted By': meta.submitted_by,\n  'Status': status,\n  'Reviewed By': '',\n  'Review Note': '',\n  _response: { status: 'processed', document_id: documentId, file_name: meta.file_name, file_link: fileLink, received_at: meta.received_at, fields, notification_sent: true },\n  _urgency: fields.urgency\n} }];\n"
@@ -195,16 +309,36 @@
       "name": "Append row to Processing Log",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
-      "position": [1780, -120],
+      "position": [
+        1780,
+        -120
+      ],
       "parameters": {
         "operation": "append",
-        "documentId": { "__rl": true, "mode": "id", "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM" },
-        "sheetName": { "__rl": true, "mode": "id", "value": "870850851" },
-        "columns": { "mappingMode": "autoMapInputData", "matchingColumns": [], "value": {} },
-        "options": { "handlingExtraData": "ignoreIt" }
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "870850851"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [],
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "ignoreIt"
+        }
       },
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "pHFYlfi7ARohCIG1", "name": "Google Sheets OAuth2 API" }
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2 API"
+        }
       }
     },
     {
@@ -212,12 +346,27 @@
       "name": "Urgency is High?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [2000, -120],
+      "position": [
+        2000,
+        -120
+      ],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
-            { "id": "c_high", "leftValue": "={{ $json._urgency }}", "rightValue": "High", "operator": { "type": "string", "operation": "equals" } }
+            {
+              "id": "c_high",
+              "leftValue": "={{ $json._urgency }}",
+              "rightValue": "High",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
           ],
           "combinator": "and"
         }
@@ -229,7 +378,10 @@
       "notes": "Both IF branches send mail per CONTRACT. Recipient: eyal9596@gmail.com.",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
-      "position": [2220, -200],
+      "position": [
+        2220,
+        -200
+      ],
       "parameters": {
         "resource": "message",
         "operation": "send",
@@ -239,7 +391,10 @@
         "options": {}
       },
       "credentials": {
-        "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" }
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail OAuth2 API"
+        }
       }
     },
     {
@@ -247,7 +402,10 @@
       "name": "Notify (normal)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
-      "position": [2220, -40],
+      "position": [
+        2220,
+        -40
+      ],
       "parameters": {
         "resource": "message",
         "operation": "send",
@@ -257,7 +415,10 @@
         "options": {}
       },
       "credentials": {
-        "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" }
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail OAuth2 API"
+        }
       }
     },
     {
@@ -265,7 +426,10 @@
       "name": "Respond processed",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [2460, -120],
+      "position": [
+        2460,
+        -120
+      ],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($('Finalize fields and status').first().json._response) }}",
@@ -277,52 +441,237 @@
       "name": "Respond EMPTY_DOCUMENT",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [1340, 200],
+      "position": [
+        1340,
+        200
+      ],
       "parameters": {
         "respondWith": "json",
         "responseBody": "{\n  \"status\": \"error\",\n  \"error_code\": \"EMPTY_DOCUMENT\",\n  \"message\": \"Text extraction produced nothing.\"\n}",
-        "options": { "responseCode": 400 }
+        "options": {
+          "responseCode": 400
+        }
       }
     }
   ],
   "connections": {
-    "Webhook POST process-document": { "main": [[{ "node": "Decode file", "type": "main", "index": 0 }]] },
-    "Decode file": { "main": [[{ "node": "Is it a PDF?", "type": "main", "index": 0 }]] },
+    "Webhook POST process-document": {
+      "main": [
+        [
+          {
+            "node": "Decode file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode file": {
+      "main": [
+        [
+          {
+            "node": "Is it a PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Is it a PDF?": {
       "main": [
-        [{ "node": "Extract text from PDF", "type": "main", "index": 0 }],
-        [{ "node": "Assemble text", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Extract text from PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assemble text",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Extract text from PDF": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
-    "Assemble text": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
+    "Extract text from PDF": {
+      "main": [
+        [
+          {
+            "node": "Assemble text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble text": {
+      "main": [
+        [
+          {
+            "node": "Has readable text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Has readable text?": {
       "main": [
-        [{ "node": "Use best text", "type": "main", "index": 0 }],
-        [{ "node": "OCR the scan (Gemini)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Use best text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR the scan (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "OCR the scan (Gemini)": { "main": [[{ "node": "Use best text", "type": "main", "index": 0 }]] },
-    "Use best text": { "main": [[{ "node": "Still no text?", "type": "main", "index": 0 }]] },
+    "OCR the scan (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Use best text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use best text": {
+      "main": [
+        [
+          {
+            "node": "Still no text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Still no text?": {
       "main": [
-        [{ "node": "Upload original to Drive", "type": "main", "index": 0 }],
-        [{ "node": "Respond EMPTY_DOCUMENT", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Upload original to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond EMPTY_DOCUMENT",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Upload original to Drive": { "main": [[{ "node": "Information Extractor", "type": "main", "index": 0 }]] },
-    "Gemini Chat Model": { "ai_languageModel": [[{ "node": "Information Extractor", "type": "ai_languageModel", "index": 0 }]] },
-    "Information Extractor": { "main": [[{ "node": "Finalize fields and status", "type": "main", "index": 0 }]] },
-    "Finalize fields and status": { "main": [[{ "node": "Append row to Processing Log", "type": "main", "index": 0 }]] },
-    "Append row to Processing Log": { "main": [[{ "node": "Urgency is High?", "type": "main", "index": 0 }]] },
+    "Upload original to Drive": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Finalize fields and status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize fields and status": {
+      "main": [
+        [
+          {
+            "node": "Append row to Processing Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row to Processing Log": {
+      "main": [
+        [
+          {
+            "node": "Urgency is High?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Urgency is High?": {
       "main": [
-        [{ "node": "Notify (urgent)", "type": "main", "index": 0 }],
-        [{ "node": "Notify (normal)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Notify (urgent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify (normal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Notify (urgent)": { "main": [[{ "node": "Respond processed", "type": "main", "index": 0 }]] },
-    "Notify (normal)": { "main": [[{ "node": "Respond processed", "type": "main", "index": 0 }]] }
+    "Notify (urgent)": {
+      "main": [
+        [
+          {
+            "node": "Respond processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify (normal)": {
+      "main": [
+        [
+          {
+            "node": "Respond processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

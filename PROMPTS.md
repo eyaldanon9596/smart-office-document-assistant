@@ -1,11 +1,107 @@
 # PROMPTS.md
 
 A record of the prompts that shaped this build, what came back, and what had to
-be corrected. Kept per `SPEC.md` section 8.
+be corrected. Kept per `SPEC.md` section 8 and Part 2 §12.5 (at least eight
+prompts, each with what came back and what had to be corrected).
 
 ---
 
-## 1. "Learn the files"
+## Graded prompt log (required format)
+
+### 1. "learn the files"
+**Came back:** read `SPEC.md` and `CONTRACT.md`, summarized the scope — a thin
+FastAPI/Jinja client, mock-first, no business logic in the app, the nested vs.
+flat field-shape difference between `POST /process-document` and
+`GET /documents`.
+**Corrected:** nothing yet to correct — this set the frame everything else was
+checked against.
+
+### 2. "any questions or needed things before you start build? how i can connect you to n8n mcp?"
+**Came back:** three scoping questions (Part 1 status, UI language, reviewer
+identity) and instructions to install the `n8n-mcp` community server.
+**Corrected:** the first `claude mcp add` attempt registered a broken entry
+(the multi-line shell command collapsed to a single `\` as the command) —
+diagnosed via `claude mcp list` and fixed by removing and re-adding it as one
+line.
+
+### 3. "build everything... when you finish make debug for the system"
+**Came back:** the full Part 2 app (8 features) built mock-first and the three
+`CONTRACT.md` webhook workflows created on the live n8n instance, left
+inactive pending credentials.
+**Corrected:** `SPEC.md` and `CONTRACT.md` disagree on sheet row order (oldest
+vs. newest first) — resolved by always sorting newest-first in the app,
+regardless of what n8n sends, so it's correct either way. Also: Starlette has
+no default body-size cap, so the "413" `SPEC.md` warned about doesn't fire on
+its own — added an explicit `Content-Length` check instead.
+
+### 4. "create the Header Auth credential and fill the placeholders"
+**Came back:** the credential was created and attached to all three webhooks.
+**Corrected:** the Sheet ID and Drive folder ID could **not** be filled — the
+n8n Google credentials belong to `eyal@psagot.net`, a different account from
+the one reachable in this session. Resolved once the user said the project
+would run entirely on `eyal9596@gmail.com`: created the Sheet and Drive folder
+in that account and patched the real IDs into every node.
+
+### 5. "retry the pdf upload through the dashboard"
+**Came back:** a real PDF returned `500` — investigated via `n8n_executions`
+and found the Drive-upload node discards the item's binary after it runs, so
+"Extract text from PDF" (which ran *after* the upload) had nothing to read.
+Text files never hit that node, which is why earlier TXT-only tests had passed.
+**Corrected:** reordered the pipeline so text extraction happens before the
+Drive upload, with downstream nodes reading text via an explicit
+`$('Assemble text')` reference instead of `$json` (which the upload node
+overwrites).
+
+### 6. "add flow that every email... must not process invoices that already processed"
+**Came back:** a new `/scan-inbox` workflow. First live run: `processed: 0`,
+all attachments `"error": "processing failed"` — the Gmail search had fanned
+out (running once per row already in the log, so every attachment appeared
+7×), and Gemini's free tier (5 requests/minute) rejected the burst of near-
+simultaneous calls that followed.
+**Corrected:** added a node that collapses the log into one item before the
+Gmail search runs, capped the scan at 4 attachments per run, and added
+`retryOnFail` to the extractor. Also switched the "processed" label to apply
+only on success, so a transient failure retries next run instead of being
+treated as done.
+
+### 7. "add the OCR support for scanned PDFs"
+**Came back:** a Gemini "Analyze Document" OCR fallback for PDFs with no text
+layer. First test (a genuine image-only PDF): the workflow ran end to end but
+every field came back "Not found" — the OCR node's real output nested the
+transcription at `content.parts[0].text`, and the merge code's `||` chain hit
+the parent `content` object first and stringified it into `"[object Object]"`.
+**Corrected:** fixed the field path; re-ran the same test PDF and got all
+seven fields correctly extracted.
+
+### 8. "think about new design for the system, help /skills"
+**Came back:** ran the newly-installed `ui-ux-pro-max` skill's
+`--design-system` generator. First query ("document processing admin console
+AP workflow") returned a marketing landing-page pattern (Hero, Client Logos,
+Contact Sales) and a Chinese-locale font — visibly wrong for an internal tool
+with no funnel.
+**Corrected:** per the skill's own verification rule (retry narrower before
+accepting an off-topic result), re-queried against its `products.csv`
+taxonomy directly, found "Productivity Tool," and re-ran — a verified match
+(Flat Design, teal + orange, Plus Jakarta Sans) applied at the CSS-variable
+level.
+
+### 9. "i want to get 100 points... start build it from 0 if needed"
+**Came back:** after reading the teacher's actual Part 1 brief (previously
+missing), built the Google Drive Trigger workflow — the whole no-code
+automation this project was meant to wrap. First live test: dropped 4 files
+into Incoming Documents at once; only 1 was processed, the other 3 silently
+disappeared from the pipeline (though correctly marked "seen" by the trigger).
+**Corrected:** traced it to every Code node using `.first()` / bare `$json`,
+which in n8n's default "run once for all items" mode only ever looks at the
+first item of a batch. Switched the affected Code nodes to "run once for each
+item" and every `.first()` reference to `.item`; also caught that
+`document_id` was built from `$execution.id` alone, which would have
+collided for every item in the same batch — added an item-index suffix.
+Re-dropped the 3 missed documents and re-verified.
+
+---
+
+## Full build log
 
 Read `SPEC.md` and `CONTRACT.md`. Established the scope: a thin FastAPI + Jinja
 interface over an existing n8n automation, mock-first, no business logic in the

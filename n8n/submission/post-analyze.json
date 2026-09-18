@@ -1,0 +1,421 @@
+{
+  "name": "Smart Office — POST /analyze (AI Agent add-on)",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Webhook POST analyze",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -260,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Smart Office Shared Secret"
+        }
+      }
+    },
+    {
+      "id": "read",
+      "name": "Read Processing Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "870850851"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "id": "find",
+      "name": "Find the document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const wanted = String(($('Webhook POST analyze').first().json.body || {}).document_id || '').trim();\nconst row = $input.all().map(i => i.json || {}).find(r => String(r['Document ID']).trim() === wanted);\nif (!row) return [{ json: { found: false, document_id: wanted } }];\nconst link = row['File Link'] || '';\nconst m = link.match(/\\/d\\/([^/]+)/) || link.match(/[?&]id=([^&]+)/);\nreturn [{ json: {\n  found: true,\n  document_id: wanted,\n  fileId: m ? m[1] : '',\n  file_name: row['File Name'] || '',\n  fields: {\n    document_type: row['Document Type'] || 'Not found',\n    sender_or_company: row['Sender / Company'] || 'Not found',\n    summary: row['Summary'] || 'Not found',\n    requested_action: row['Requested Action'] || 'No action found',\n    deadline: row['Deadline'] || 'Not found',\n    urgency: row['Urgency'] || 'Not found',\n    department: row['Department'] || 'Not found',\n  },\n} }];\n"
+      }
+    },
+    {
+      "id": "iffound",
+      "name": "Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "dl",
+      "name": "Download from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        620,
+        -100
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.fileId }}"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "id": "ispdf",
+      "name": "Is it a PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        840,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c_pdf",
+              "leftValue": "={{ ($('Find the document').first().json.file_name || '').toLowerCase().endsWith('.pdf') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "expdf",
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1060,
+        -180
+      ],
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {
+          "joinPages": true
+        }
+      }
+    },
+    {
+      "id": "extxt",
+      "name": "Extract TXT text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1060,
+        -20
+      ],
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "destinationKey": "text",
+        "options": {}
+      }
+    },
+    {
+      "id": "build",
+      "name": "Build the prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -100
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const info = $('Find the document').first().json;\nconst f = info.fields;\nconst text = ($json.text || '').trim() || '(the document text could not be read)';\nconst prompt = [\n  'Already-extracted fields:',\n  `- Document type: ${f.document_type}`,\n  `- Sender / company: ${f.sender_or_company}`,\n  `- Summary: ${f.summary}`,\n  `- Requested action: ${f.requested_action}`,\n  `- Deadline: ${f.deadline}`,\n  `- Urgency: ${f.urgency}`,\n  `- Department: ${f.department}`,\n  '',\n  'Full document text:',\n  text,\n].join('\\n');\nreturn [{ json: { document_id: info.document_id, prompt } }];\n"
+      }
+    },
+    {
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1500,
+        -100
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are an office document analyst. You are given the full text of a business document (usually an invoice or purchase order) plus the fields already extracted from it. Write a clear briefing for a non-expert office employee, using these headings exactly:\n\n**What this document is** — 2 to 3 sentences: the document type and purpose, who it is from and to, the total amount and currency, and any deadline.\n\n**About the sender** — 2 to 4 sentences on the company that issued it: what industry they are in and what they sell or do. If you are not confident who they are, say so rather than guessing.\n\n**Line items** — one bullet per product or charge. For each: the name as written, the quantity and price if shown, and a plain-language explanation of what the product or service actually is. Example: \"Office 365 Exchange Online Plan 1 — a hosted business email mailbox in the cloud, about 50 GB of storage per user.\"\n\n**Worth a closer look** — anything unusual, missing, inconsistent, or that a person should check before approving. If nothing stands out, say so.\n\n**Recommended next step** — one sentence.\n\nBase everything on the document text provided. Do not invent line items or amounts. Be concise and concrete."
+        }
+      }
+    },
+    {
+      "id": "gem",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        120
+      ],
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "respok",
+      "name": "Respond with analysis",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1720,
+        -100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ document_id: $('Build the prompt').first().json.document_id, analysis: $json.output }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "resp404",
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        620,
+        120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"error\",\n  \"error_code\": \"NOT_FOUND\",\n  \"message\": \"No document matches that id.\"\n}",
+        "options": {
+          "responseCode": 404
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook POST analyze": {
+      "main": [
+        [
+          {
+            "node": "Read Processing Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Processing Log": {
+      "main": [
+        [
+          {
+            "node": "Find the document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the document": {
+      "main": [
+        [
+          {
+            "node": "Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found?": {
+      "main": [
+        [
+          {
+            "node": "Download from Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download from Drive": {
+      "main": [
+        [
+          {
+            "node": "Is it a PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it a PDF?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract TXT text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "Build the prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract TXT text": {
+      "main": [
+        [
+          {
+            "node": "Build the prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond with analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

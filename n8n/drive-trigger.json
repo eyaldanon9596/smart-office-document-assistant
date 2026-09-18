@@ -1,0 +1,311 @@
+{
+  "name": "Smart Office — Drive Trigger (Part 1 automation)",
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [-400, 0],
+      "parameters": {
+        "triggerOn": "specificFolder",
+        "folderToWatch": { "__rl": true, "mode": "id", "value": "1Yo9JTSXBhaaSFYqLtXJfSXGqzBPhrFAh" },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "credentials": { "googleDriveOAuth2Api": { "id": "ca58XKLdnQURD47g", "name": "Google Drive account" } }
+    },
+    {
+      "id": "dl",
+      "name": "Download File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-180, 0],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json.id }}" },
+        "options": {}
+      },
+      "credentials": { "googleDriveOAuth2Api": { "id": "ca58XKLdnQURD47g", "name": "Google Drive account" } }
+    },
+    {
+      "id": "ifpdf",
+      "name": "Is it a PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [40, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_pdf", "leftValue": "={{ $('Google Drive Trigger').first().json.mimeType }}", "rightValue": "application/pdf", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "expdf",
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "onError": "continueRegularOutput",
+      "position": [260, -120],
+      "parameters": { "operation": "pdf", "binaryPropertyName": "data", "options": { "joinPages": true } }
+    },
+    {
+      "id": "extxt",
+      "name": "Extract TXT text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "onError": "continueRegularOutput",
+      "position": [260, 60],
+      "parameters": { "operation": "text", "binaryPropertyName": "data", "destinationKey": "text", "options": {} }
+    },
+    {
+      "id": "assemble",
+      "name": "Assemble text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const trig = $('Google Drive Trigger').first().json;\nconst dl = $('Download File').first();\nconst text = String(($json && $json.text) || '').trim();\nconst received_at = new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z');\nreturn [{ json: {\n  file_name: trig.name || 'document',\n  mime_type: trig.mimeType || 'application/octet-stream',\n  submitted_by: 'Not found',\n  received_at,\n  text,\n}, binary: dl.binary }];\n"
+      }
+    },
+    {
+      "id": "iftext",
+      "name": "Has readable text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [700, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_txt", "leftValue": "={{ ($json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "ocr",
+      "name": "OCR the scan (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000,
+      "onError": "continueRegularOutput",
+      "position": [920, 180],
+      "parameters": {
+        "resource": "document",
+        "operation": "analyze",
+        "modelId": { "__rl": true, "mode": "id", "value": "models/gemini-3.6-flash" },
+        "text": "This is a scanned document with no text layer. Transcribe ALL text you can see, exactly as written: every heading, line item, description, quantity, unit price, amount, total, tax, date, invoice or PO number, and every company name and address. Keep the natural reading order. Output plain text only - no commentary, no markdown, no explanation.",
+        "inputType": "binary",
+        "binaryPropertyName": "data",
+        "options": { "maxOutputTokens": 4096 }
+      },
+      "credentials": { "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" } }
+    },
+    {
+      "id": "usebest",
+      "name": "Use best text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 180],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const asm = $('Assemble text').first();\nlet text = String((asm.json && asm.json.text) || '').trim();\nif (!text) {\n  const o = $json || {};\n  const parts = o.content && o.content.parts;\n  text = String(\n    (parts && parts[0] && parts[0].text) ||\n    (typeof o.content === 'string' ? o.content : '') ||\n    o.text || o.response || ''\n  ).trim();\n}\nreturn [{ json: { ...asm.json, text } }];\n"
+      }
+    },
+    {
+      "id": "ifstill",
+      "name": "Any text after OCR?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1360, 180],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_still", "leftValue": "={{ ($json.text || '').trim().length > 0 }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "blank",
+      "name": "Build blank fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 320],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  document_type: 'other', sender_or_company: 'Not found', summary: 'Not found',\n  requested_action: 'No action found', deadline: 'Not found', urgency: 'Low', department: 'General',\n} }];\n"
+      }
+    },
+    {
+      "id": "gem",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1580, 40],
+      "parameters": { "modelName": "models/gemini-3.6-flash", "options": { "temperature": 0 } },
+      "credentials": { "googlePalmApi": { "id": "3Bj78Dc8WJWZwwEF", "name": "Google Gemini(PaLM) Api account" } }
+    },
+    {
+      "id": "ie",
+      "name": "Information Extractor",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000,
+      "position": [1580, -140],
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"document_type\": { \"type\": \"string\", \"enum\": [\"invoice\",\"request\",\"report\",\"complaint\",\"contract\",\"quote\",\"other\"] },\n    \"sender_or_company\": { \"type\": \"string\" },\n    \"summary\": { \"type\": \"string\" },\n    \"requested_action\": { \"type\": \"string\" },\n    \"deadline\": { \"type\": \"string\" },\n    \"urgency\": { \"type\": \"string\", \"enum\": [\"Low\",\"Medium\",\"High\"] },\n    \"department\": { \"type\": \"string\", \"enum\": [\"Sales\",\"Finance\",\"Support\",\"HR\",\"Management\",\"General\"] }\n  },\n  \"required\": [\"document_type\",\"sender_or_company\",\"summary\",\"requested_action\",\"deadline\",\"urgency\",\"department\"]\n}",
+        "options": {
+          "systemPromptTemplate": "Read the document like an office assistant. Extract only information that appears in the document. Do not invent missing details. Use \"Not found\" when information is missing, except requested_action, which must be exactly \"No action found\" when absent. Summarize in no more than three short sentences. Mark urgency as High only when the document contains an immediate deadline, payment risk, legal or safety risk, or an explicit urgent request; otherwise use Medium or Low. Use only the allowed enum values."
+        }
+      }
+    },
+    {
+      "id": "final",
+      "name": "Finalize fields and status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 0],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const ie = $json.output || $json;\nconst meta = $('Assemble text').first().json;\nconst trig = $('Google Drive Trigger').first().json;\nconst F = ['document_type','sender_or_company','summary','requested_action','deadline','urgency','department'];\nconst fields = {}; let missing = 0;\nfor (const k of F) {\n  let v = ie && ie[k];\n  if (v === undefined || v === null || String(v).trim() === '') v = (k === 'requested_action') ? 'No action found' : 'Not found';\n  if (v === 'Not found' || v === 'No action found') missing++;\n  fields[k] = v;\n}\nconst status = missing >= 2 ? 'Needs Review' : 'Processed';\nconst documentId = 'exec-' + ($execution.id || Date.now());\nconst fileLink = 'https://drive.google.com/file/d/' + trig.id + '/view';\nreturn [{ json: {\n  'Document ID': documentId,\n  'Received At': meta.received_at,\n  'File Name': meta.file_name,\n  'File Link': fileLink,\n  'Document Type': fields.document_type,\n  'Sender / Company': fields.sender_or_company,\n  'Summary': fields.summary,\n  'Requested Action': fields.requested_action,\n  'Deadline': fields.deadline,\n  'Urgency': fields.urgency,\n  'Department': fields.department,\n  'Submitted By': meta.submitted_by,\n  'Status': status,\n  'Reviewed By': '',\n  'Review Note': '',\n  _urgency: fields.urgency,\n} }];\n"
+      }
+    },
+    {
+      "id": "append",
+      "name": "Append row to Processing Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2020, 0],
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "1o-wteplPPTwDuC6dGl-bQXKukYNS1adUkfxVmNd8GbM" },
+        "sheetName": { "__rl": true, "mode": "id", "value": "870850851" },
+        "columns": { "mappingMode": "autoMapInputData", "matchingColumns": [], "value": {} },
+        "options": { "handlingExtraData": "ignoreIt" }
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "pHFYlfi7ARohCIG1", "name": "Google Sheets OAuth2 API" } }
+    },
+    {
+      "id": "ifhigh",
+      "name": "Urgency is High?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2240, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c_high", "leftValue": "={{ $json._urgency }}", "rightValue": "High", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "gm_high",
+      "name": "Notify (urgent)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2460, -120],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "eyal9596@gmail.com",
+        "subject": "=URGENT: {{ $json['Document Type'] }} from {{ $json['Sender / Company'] }}",
+        "message": "=File: {{ $json['File Name'] }}\nSender / Company: {{ $json['Sender / Company'] }}\nUrgency: {{ $json['Urgency'] }}\nDepartment: {{ $json['Department'] }}\nDeadline: {{ $json['Deadline'] }}\n\nSummary: {{ $json['Summary'] }}\n\nRequested action: {{ $json['Requested Action'] }}\n\nOpen the file: {{ $json['File Link'] }}",
+        "options": {}
+      },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "gm_norm",
+      "name": "Notify (normal)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2460, 120],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "eyal9596@gmail.com",
+        "subject": "=Document processed: {{ $json['File Name'] }}",
+        "message": "=File: {{ $json['File Name'] }}\nSender / Company: {{ $json['Sender / Company'] }}\nUrgency: {{ $json['Urgency'] }}\nDepartment: {{ $json['Department'] }}\nDeadline: {{ $json['Deadline'] }}\n\nSummary: {{ $json['Summary'] }}\n\nRequested action: {{ $json['Requested Action'] }}\n\nOpen the file: {{ $json['File Link'] }}\n\n{{ $json['Requested Action'] === 'No action found' ? 'No action is required.' : 'Action is required -- see above.' }}",
+        "options": {}
+      },
+      "credentials": { "gmailOAuth2": { "id": "AYgjFyDnQF1fGC7w", "name": "Gmail OAuth2 API" } }
+    },
+    {
+      "id": "move",
+      "name": "Move file to Processed Documents",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2680, 0],
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $('Google Drive Trigger').first().json.id }}" },
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "1RBZKI8MBjRbh1iMN4TMe9mvJEgTKJyXr" },
+        "options": {}
+      },
+      "credentials": { "googleDriveOAuth2Api": { "id": "ca58XKLdnQURD47g", "name": "Google Drive account" } }
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": { "main": [[{ "node": "Download File", "type": "main", "index": 0 }]] },
+    "Download File": { "main": [[{ "node": "Is it a PDF?", "type": "main", "index": 0 }]] },
+    "Is it a PDF?": {
+      "main": [
+        [{ "node": "Extract PDF text", "type": "main", "index": 0 }],
+        [{ "node": "Extract TXT text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract PDF text": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
+    "Extract TXT text": { "main": [[{ "node": "Assemble text", "type": "main", "index": 0 }]] },
+    "Assemble text": { "main": [[{ "node": "Has readable text?", "type": "main", "index": 0 }]] },
+    "Has readable text?": {
+      "main": [
+        [{ "node": "Information Extractor", "type": "main", "index": 0 }],
+        [{ "node": "OCR the scan (Gemini)", "type": "main", "index": 0 }]
+      ]
+    },
+    "OCR the scan (Gemini)": { "main": [[{ "node": "Use best text", "type": "main", "index": 0 }]] },
+    "Use best text": { "main": [[{ "node": "Any text after OCR?", "type": "main", "index": 0 }]] },
+    "Any text after OCR?": {
+      "main": [
+        [{ "node": "Information Extractor", "type": "main", "index": 0 }],
+        [{ "node": "Build blank fields", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build blank fields": { "main": [[{ "node": "Finalize fields and status", "type": "main", "index": 0 }]] },
+    "Gemini Chat Model": { "ai_languageModel": [[{ "node": "Information Extractor", "type": "ai_languageModel", "index": 0 }]] },
+    "Information Extractor": { "main": [[{ "node": "Finalize fields and status", "type": "main", "index": 0 }]] },
+    "Finalize fields and status": { "main": [[{ "node": "Append row to Processing Log", "type": "main", "index": 0 }]] },
+    "Append row to Processing Log": { "main": [[{ "node": "Urgency is High?", "type": "main", "index": 0 }]] },
+    "Urgency is High?": {
+      "main": [
+        [{ "node": "Notify (urgent)", "type": "main", "index": 0 }],
+        [{ "node": "Notify (normal)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notify (urgent)": { "main": [[{ "node": "Move file to Processed Documents", "type": "main", "index": 0 }]] },
+    "Notify (normal)": { "main": [[{ "node": "Move file to Processed Documents", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

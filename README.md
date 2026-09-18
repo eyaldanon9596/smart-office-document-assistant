@@ -5,7 +5,47 @@ document, watches it being processed, reads the extracted business fields,
 searches past results, and marks a document as reviewed. All the intelligence
 lives in n8n; this app only collects input, calls n8n, and shows what came back.
 
-See `SPEC.md` for the rules and `CONTRACT.md` for the wire format.
+See `SPEC.md` for the rules and `CONTRACT.md` for the wire format. A fuller,
+diagrammed walkthrough of the whole system (architecture, all flows, what's
+verified, open points) is at:
+https://claude.ai/code/artifact/f3a64f72-8398-4e8f-9f70-c6eb1d60b2c7
+
+## Architecture
+
+```
+                    ┌──────────────────────────┐
+  Browser  ───────▶ │   FastAPI app (Part 2)   │
+  (upload,          │  adds x-api-key header   │
+   dashboard,       │  /api/* pass-through     │
+   review)          └────────────┬─────────────┘
+                                  │ HTTPS + shared secret
+                                  ▼
+                    ┌──────────────────────────┐
+                    │     n8n (Part 1 + 2)      │
+                    │  webhooks:                │
+                    │   POST /process-document  │
+                    │   GET  /documents          │
+                    │   POST /review             │
+                    │  add-ons:                  │
+                    │   POST /analyze (AI Agent) │
+                    │   POST /scan-inbox (email) │
+                    └───┬──────────┬─────────┬──┘
+                        │          │         │
+       Google Drive Trigger        │         │
+       (Incoming Documents) ───────┘         │
+                        │                    │
+                        ▼                    ▼
+              Google Sheet            Gmail (notify) +
+           (Document Processing       Gemini (extract,
+                 Log)                   OCR, briefings)
+```
+
+Two independent entry points reach the **same** extraction → Sheet → Gmail
+logic: the webhook (app-driven) and the Google Drive Trigger watching
+`Incoming Documents` (the original Part 1 no-code path). Both write to the
+same Sheet, so a document dropped in Drive shows up in the dashboard exactly
+like one sent from the app. See "Known limitations" below for how these two
+paths are implemented (duplicated, not a shared sub-workflow).
 
 ## Run
 
@@ -82,3 +122,36 @@ Not part of the data contract.
   again for the rest.
 
 Mock mode returns canned results for both so the buttons work offline.
+
+## Known limitations
+
+- **DOCX is not extracted.** n8n's *Extract from File* has no DOCX operation,
+  and a DOCX has no page images for the OCR fallback either. A DOCX upload
+  returns `EMPTY_DOCUMENT`. PDF and TXT both work, including scanned/
+  image-only PDFs via a Gemini OCR fallback.
+- **The Drive-trigger and webhook workflows duplicate their shared steps**
+  (text extraction, AI extraction, the Needs-Review rule, the Sheet append,
+  the Gmail notify) instead of calling one sub-workflow, which is what Part 2
+  §4 recommends. This was a deliberate, documented trade-off — see
+  `REFLECTION.md` for why and what it costs.
+- **The extraction model is Gemini, not OpenAI.** Both `openAiApi`
+  credentials on the n8n instance had dead API keys; the Information
+  Extractor runs on `models/gemini-3.6-flash` instead. Its free tier allows
+  5 requests/minute, which is the practical ceiling on how many documents can
+  land at once — see `n8n/README.md`.
+- **No content-level dedup on the Drive-folder path.** The email-intake
+  add-on tags a processed message so it's never re-imported; a file dropped
+  twice into `Incoming Documents` has no equivalent guard.
+- **Browser calls n8n directly? No** — this build uses the recommended
+  small-server pattern (Part 2 §8), so the CORS caveat in that section does
+  not apply here.
+
+## Other project documents
+
+| File | What it is |
+|---|---|
+| `SPEC.md`, `CONTRACT.md` | The Part 2 specification and the app↔n8n data contract |
+| `N8N_SETUP.md` | Every n8n workflow, its credentials, and how to activate them |
+| `PROMPTS.md` | The graded prompt log, plus the full build history |
+| `REFLECTION.md` | What the app adds, what still needs a human, what breaks at scale |
+| `n8n/` | JSON exports of all workflows; `n8n/submission/` has credentials stripped |
