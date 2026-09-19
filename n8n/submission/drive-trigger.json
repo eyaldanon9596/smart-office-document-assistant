@@ -54,33 +54,67 @@
       }
     },
     {
-      "id": "ifpdf",
-      "name": "Is it a PDF?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
+      "id": "route",
+      "name": "Route by file type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
       "position": [
         40,
         0
       ],
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
+        "rules": {
+          "values": [
             {
-              "id": "c_pdf",
-              "leftValue": "={{ $('Google Drive Trigger').first().json.mimeType }}",
-              "rightValue": "application/pdf",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c_pdf",
+                    "leftValue": "={{ $('Google Drive Trigger').item.json.mimeType }}",
+                    "rightValue": "application/pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c_docx",
+                    "leftValue": "={{ $('Google Drive Trigger').item.json.mimeType }}",
+                    "rightValue": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DOCX"
             }
-          ],
-          "combinator": "and"
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
         }
       }
     },
@@ -92,7 +126,7 @@
       "onError": "continueRegularOutput",
       "position": [
         260,
-        -120
+        -160
       ],
       "parameters": {
         "operation": "pdf",
@@ -103,6 +137,20 @@
       }
     },
     {
+      "id": "docx",
+      "name": "Extract DOCX (JS)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Extract plain text from a .docx (a ZIP archive containing word/document.xml).\n// The Code node sandbox has no require('zlib') and no DecompressionStream, so\n// this includes a small pure-JS RFC 1951 (raw DEFLATE) inflater plus a minimal\n// ZIP central-directory reader. No external dependencies.\n\nconst item = $input.first();\nconst binProp = Object.keys(item.binary || {})[0] || 'data';\nconst buf = await this.helpers.getBinaryDataBuffer(0, binProp);\n\nfunction inflateRaw(input) {\n  let pos = 0, bitBuf = 0, bitCnt = 0;\n  const out = [];\n  function bit() {\n    if (bitCnt === 0) { bitBuf = input[pos++]; bitCnt = 8; }\n    const b = bitBuf & 1; bitBuf >>= 1; bitCnt--; return b;\n  }\n  function bits(n) { let v = 0; for (let i = 0; i < n; i++) v |= bit() << i; return v; }\n  function buildTree(lengths) {\n    const maxBits = Math.max(0, ...lengths);\n    const blCount = new Array(maxBits + 1).fill(0);\n    for (const l of lengths) if (l > 0) blCount[l]++;\n    blCount[0] = 0;\n    let code = 0;\n    const nextCode = new Array(maxBits + 1).fill(0);\n    for (let b = 1; b <= maxBits; b++) { code = (code + blCount[b - 1]) << 1; nextCode[b] = code; }\n    const table = new Map();\n    for (let n = 0; n < lengths.length; n++) {\n      const l = lengths[n];\n      if (l > 0) { table.set(l + ':' + nextCode[l], n); nextCode[l]++; }\n    }\n    return table;\n  }\n  function decodeSymbol(table) {\n    let code = 0, len = 0;\n    while (len <= 15) {\n      code = (code << 1) | bit(); len++;\n      const sym = table.get(len + ':' + code);\n      if (sym !== undefined) return sym;\n    }\n    throw new Error('bad huffman code');\n  }\n  const LEN_BASE = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];\n  const LEN_EXTRA = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];\n  const DIST_BASE = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];\n  const DIST_EXTRA = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];\n  const CLEN_ORDER = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];\n  let fixedLit = null, fixedDist = null;\n  function buildFixed() {\n    const litLen = new Array(288);\n    for (let i = 0; i < 144; i++) litLen[i] = 8;\n    for (let i = 144; i < 256; i++) litLen[i] = 9;\n    for (let i = 256; i < 280; i++) litLen[i] = 7;\n    for (let i = 280; i < 288; i++) litLen[i] = 8;\n    fixedLit = buildTree(litLen);\n    fixedDist = buildTree(new Array(30).fill(5));\n  }\n  let finalBlock = false;\n  while (!finalBlock) {\n    finalBlock = bit() === 1;\n    const type = bits(2);\n    if (type === 0) {\n      bitBuf = 0; bitCnt = 0;\n      const len = input[pos] | (input[pos + 1] << 8);\n      pos += 4;\n      for (let i = 0; i < len; i++) out.push(input[pos++]);\n    } else {\n      let litTable, distTable;\n      if (type === 1) {\n        if (!fixedLit) buildFixed();\n        litTable = fixedLit; distTable = fixedDist;\n      } else if (type === 2) {\n        const hlit = bits(5) + 257, hdist = bits(5) + 1, hclen = bits(4) + 4;\n        const clLengths = new Array(19).fill(0);\n        for (let i = 0; i < hclen; i++) clLengths[CLEN_ORDER[i]] = bits(3);\n        const clTable = buildTree(clLengths);\n        const lengths = [];\n        while (lengths.length < hlit + hdist) {\n          const sym = decodeSymbol(clTable);\n          if (sym < 16) lengths.push(sym);\n          else if (sym === 16) { const r = bits(2) + 3; const prev = lengths[lengths.length - 1]; for (let i = 0; i < r; i++) lengths.push(prev); }\n          else if (sym === 17) { const r = bits(3) + 3; for (let i = 0; i < r; i++) lengths.push(0); }\n          else { const r = bits(7) + 11; for (let i = 0; i < r; i++) lengths.push(0); }\n        }\n        litTable = buildTree(lengths.slice(0, hlit));\n        distTable = buildTree(lengths.slice(hlit));\n      } else {\n        throw new Error('unsupported deflate block type');\n      }\n      while (true) {\n        const sym = decodeSymbol(litTable);\n        if (sym < 256) { out.push(sym); }\n        else if (sym === 256) { break; }\n        else {\n          const li = sym - 257;\n          const len = LEN_BASE[li] + bits(LEN_EXTRA[li]);\n          const dsym = decodeSymbol(distTable);\n          const dist = DIST_BASE[dsym] + bits(DIST_EXTRA[dsym]);\n          const start = out.length - dist;\n          for (let i = 0; i < len; i++) out.push(out[start + i]);\n        }\n      }\n    }\n  }\n  return Buffer.from(out);\n}\n\nfunction findZipEntry(buf, entryName) {\n  let eocd = -1;\n  const scanFrom = Math.max(0, buf.length - 66000);\n  for (let i = buf.length - 22; i >= scanFrom; i--) {\n    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }\n  }\n  if (eocd < 0) throw new Error('not a zip file');\n  const cdOffset = buf.readUInt32LE(eocd + 16);\n  const cdEntries = buf.readUInt16LE(eocd + 10);\n  let p = cdOffset;\n  for (let i = 0; i < cdEntries; i++) {\n    if (buf.readUInt32LE(p) !== 0x02014b50) break;\n    const method = buf.readUInt16LE(p + 10);\n    const compSize = buf.readUInt32LE(p + 20);\n    const nameLen = buf.readUInt16LE(p + 28);\n    const extraLen = buf.readUInt16LE(p + 30);\n    const commentLen = buf.readUInt16LE(p + 32);\n    const localOffset = buf.readUInt32LE(p + 42);\n    const name = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');\n    if (name === entryName) {\n      const lfNameLen = buf.readUInt16LE(localOffset + 26);\n      const lfExtraLen = buf.readUInt16LE(localOffset + 28);\n      const dataStart = localOffset + 30 + lfNameLen + lfExtraLen;\n      const data = buf.slice(dataStart, dataStart + compSize);\n      return method === 0 ? data : inflateRaw(data);\n    }\n    p += 46 + nameLen + extraLen + commentLen;\n  }\n  throw new Error('word/document.xml not found in this .docx');\n}\n\nlet text = '';\ntry {\n  const xml = findZipEntry(buf, 'word/document.xml').toString('utf8');\n  text = xml\n    .replace(/<w:tab[^>]*\\/>/g, '\\t')\n    .replace(/<\\/w:p>/g, '\\n')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&apos;/g, \"'\")\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n} catch (e) {\n  text = '';\n}\n\nreturn [{ json: { ...item.json, text }, binary: item.binary }];\n"
+      }
+    },
+    {
       "id": "extxt",
       "name": "Extract TXT text",
       "type": "n8n-nodes-base.extractFromFile",
@@ -110,7 +158,7 @@
       "onError": "continueRegularOutput",
       "position": [
         260,
-        60
+        160
       ],
       "parameters": {
         "operation": "text",
@@ -129,8 +177,9 @@
         0
       ],
       "parameters": {
+        "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const trig = $('Google Drive Trigger').first().json;\nconst dl = $('Download File').first();\nconst text = String(($json && $json.text) || '').trim();\nconst received_at = new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z');\nreturn [{ json: {\n  file_name: trig.name || 'document',\n  mime_type: trig.mimeType || 'application/octet-stream',\n  submitted_by: 'Not found',\n  received_at,\n  text,\n}, binary: dl.binary }];\n"
+        "jsCode": "const trig = $('Google Drive Trigger').item.json;\nconst dl = $('Download File').item;\nconst text = String(($json && $json.text) || '').trim();\nconst received_at = new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z');\nreturn { json: {\n  file_name: trig.name || 'document',\n  mime_type: trig.mimeType || 'application/octet-stream',\n  submitted_by: 'Not found',\n  received_at,\n  text,\n}, binary: dl.binary };\n"
       }
     },
     {
@@ -210,8 +259,9 @@
         180
       ],
       "parameters": {
+        "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const asm = $('Assemble text').first();\nlet text = String((asm.json && asm.json.text) || '').trim();\nif (!text) {\n  const o = $json || {};\n  const parts = o.content && o.content.parts;\n  text = String(\n    (parts && parts[0] && parts[0].text) ||\n    (typeof o.content === 'string' ? o.content : '') ||\n    o.text || o.response || ''\n  ).trim();\n}\nreturn [{ json: { ...asm.json, text } }];\n"
+        "jsCode": "const asm = $('Assemble text').item;\nlet text = String((asm.json && asm.json.text) || '').trim();\nif (!text) {\n  const o = $json || {};\n  const parts = o.content && o.content.parts;\n  text = String(\n    (parts && parts[0] && parts[0].text) ||\n    (typeof o.content === 'string' ? o.content : '') ||\n    o.text || o.response || ''\n  ).trim();\n}\nreturn { json: { ...asm.json, text } };\n"
       }
     },
     {
@@ -256,8 +306,9 @@
         320
       ],
       "parameters": {
+        "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "return [{ json: {\n  document_type: 'other', sender_or_company: 'Not found', summary: 'Not found',\n  requested_action: 'No action found', deadline: 'Not found', urgency: 'Low', department: 'General',\n} }];\n"
+        "jsCode": "return { json: {\n  document_type: 'other', sender_or_company: 'Not found', summary: 'Not found',\n  requested_action: 'No action found', deadline: 'Not found', urgency: 'Low', department: 'General',\n} };\n"
       }
     },
     {
@@ -283,24 +334,38 @@
       }
     },
     {
-      "id": "ie",
-      "name": "Information Extractor",
-      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
-      "typeVersion": 1.2,
+      "id": "agent",
+      "name": "AI Agent (extract fields)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 20000,
       "position": [
         1580,
-        -140
+        -160
       ],
       "parameters": {
+        "promptType": "define",
         "text": "={{ $json.text }}",
-        "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"document_type\": { \"type\": \"string\", \"enum\": [\"invoice\",\"request\",\"report\",\"complaint\",\"contract\",\"quote\",\"other\"] },\n    \"sender_or_company\": { \"type\": \"string\" },\n    \"summary\": { \"type\": \"string\" },\n    \"requested_action\": { \"type\": \"string\" },\n    \"deadline\": { \"type\": \"string\" },\n    \"urgency\": { \"type\": \"string\", \"enum\": [\"Low\",\"Medium\",\"High\"] },\n    \"department\": { \"type\": \"string\", \"enum\": [\"Sales\",\"Finance\",\"Support\",\"HR\",\"Management\",\"General\"] }\n  },\n  \"required\": [\"document_type\",\"sender_or_company\",\"summary\",\"requested_action\",\"deadline\",\"urgency\",\"department\"]\n}",
+        "hasOutputParser": true,
         "options": {
-          "systemPromptTemplate": "Read the document like an office assistant. Extract only information that appears in the document. Do not invent missing details. Use \"Not found\" when information is missing, except requested_action, which must be exactly \"No action found\" when absent. Summarize in no more than three short sentences. Mark urgency as High only when the document contains an immediate deadline, payment risk, legal or safety risk, or an explicit urgent request; otherwise use Medium or Low. Use only the allowed enum values."
+          "systemMessage": "Read the document like an office assistant. Extract only information that appears in the document. Do not invent missing details. Use \"Not found\" when information is missing, except requested_action, which must be exactly \"No action found\" when absent. Summarize in no more than three short sentences. Mark urgency as High only when the document contains an immediate deadline, payment risk, legal or safety risk, or an explicit urgent request; otherwise use Medium or Low. Use only the allowed enum values. Return only the structured fields, nothing else."
         }
+      }
+    },
+    {
+      "id": "parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1580,
+        -320
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"document_type\": {\"type\": \"string\", \"enum\": [\"invoice\", \"request\", \"report\", \"complaint\", \"contract\", \"quote\", \"other\"]}, \"sender_or_company\": {\"type\": \"string\"}, \"summary\": {\"type\": \"string\"}, \"requested_action\": {\"type\": \"string\"}, \"deadline\": {\"type\": \"string\"}, \"urgency\": {\"type\": \"string\", \"enum\": [\"Low\", \"Medium\", \"High\"]}, \"department\": {\"type\": \"string\", \"enum\": [\"Sales\", \"Finance\", \"Support\", \"HR\", \"Management\", \"General\"]}}, \"required\": [\"document_type\", \"sender_or_company\", \"summary\", \"requested_action\", \"deadline\", \"urgency\", \"department\"]}"
       }
     },
     {
@@ -313,8 +378,9 @@
         0
       ],
       "parameters": {
+        "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const ie = $json.output || $json;\nconst meta = $('Assemble text').first().json;\nconst trig = $('Google Drive Trigger').first().json;\nconst F = ['document_type','sender_or_company','summary','requested_action','deadline','urgency','department'];\nconst fields = {}; let missing = 0;\nfor (const k of F) {\n  let v = ie && ie[k];\n  if (v === undefined || v === null || String(v).trim() === '') v = (k === 'requested_action') ? 'No action found' : 'Not found';\n  if (v === 'Not found' || v === 'No action found') missing++;\n  fields[k] = v;\n}\nconst status = missing >= 2 ? 'Needs Review' : 'Processed';\nconst documentId = 'exec-' + ($execution.id || Date.now());\nconst fileLink = 'https://drive.google.com/file/d/' + trig.id + '/view';\nreturn [{ json: {\n  'Document ID': documentId,\n  'Received At': meta.received_at,\n  'File Name': meta.file_name,\n  'File Link': fileLink,\n  'Document Type': fields.document_type,\n  'Sender / Company': fields.sender_or_company,\n  'Summary': fields.summary,\n  'Requested Action': fields.requested_action,\n  'Deadline': fields.deadline,\n  'Urgency': fields.urgency,\n  'Department': fields.department,\n  'Submitted By': meta.submitted_by,\n  'Status': status,\n  'Reviewed By': '',\n  'Review Note': '',\n  _urgency: fields.urgency,\n} }];\n"
+        "jsCode": "const ie = $json.output || $json;\nconst meta = $('Assemble text').item.json;\nconst trig = $('Google Drive Trigger').item.json;\nconst F = ['document_type','sender_or_company','summary','requested_action','deadline','urgency','department'];\nconst fields = {}; let missing = 0;\nfor (const k of F) {\n  let v = ie && ie[k];\n  if (v === undefined || v === null || String(v).trim() === '') v = (k === 'requested_action') ? 'No action found' : 'Not found';\n  if (v === 'Not found' || v === 'No action found') missing++;\n  fields[k] = v;\n}\nconst status = missing >= 2 ? 'Needs Review' : 'Processed';\nconst documentId = 'exec-' + ($execution.id || Date.now()) + '-' + $itemIndex;\nconst fileLink = 'https://drive.google.com/file/d/' + trig.id + '/view';\nreturn { json: {\n  'Document ID': documentId,\n  'Received At': meta.received_at,\n  'File Name': meta.file_name,\n  'File Link': fileLink,\n  'Document Type': fields.document_type,\n  'Sender / Company': fields.sender_or_company,\n  'Summary': fields.summary,\n  'Requested Action': fields.requested_action,\n  'Deadline': fields.deadline,\n  'Urgency': fields.urgency,\n  'Department': fields.department,\n  'Submitted By': meta.submitted_by,\n  'Status': status,\n  'Reviewed By': '',\n  'Review Note': '',\n  _urgency: fields.urgency,\n} };\n"
       }
     },
     {
@@ -392,7 +458,7 @@
       "typeVersion": 2.2,
       "position": [
         2460,
-        -120
+        -160
       ],
       "parameters": {
         "resource": "message",
@@ -416,7 +482,7 @@
       "typeVersion": 2.2,
       "position": [
         2460,
-        120
+        80
       ],
       "parameters": {
         "resource": "message",
@@ -430,6 +496,69 @@
         "gmailOAuth2": {
           "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
           "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "id": "calgate",
+      "name": "Deadline & urgent enough?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c_cal",
+              "leftValue": "={{ $json['Deadline'] !== 'Not found' && ['High','Medium'].includes($json['Urgency']) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "calevt",
+      "name": "Create Calendar event",
+      "notes": "Needs a Google Calendar credential created in n8n before activating - see README.",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2460,
+        240
+      ],
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "eyal9596@gmail.com",
+          "cachedResultName": "eyal9596@gmail.com"
+        },
+        "start": "={{ $now.toISO() }}",
+        "end": "={{ $now.plus(1, 'hour').toISO() }}",
+        "additionalFields": {
+          "summary": "={{ $json['Document Type'] }} - {{ $json['Sender / Company'] }}",
+          "description": "=Summary: {{ $json['Summary'] }}\nRequested action: {{ $json['Requested Action'] }}\nDeadline: {{ $json['Deadline'] }}\nUrgency: {{ $json['Urgency'] }}\nOpen the file: {{ $json['File Link'] }}"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Calendar account"
         }
       }
     },
@@ -448,7 +577,7 @@
         "fileId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $('Google Drive Trigger').first().json.id }}"
+          "value": "={{ $('Google Drive Trigger').item.json.id }}"
         },
         "driveId": {
           "__rl": true,
@@ -486,18 +615,25 @@
       "main": [
         [
           {
-            "node": "Is it a PDF?",
+            "node": "Route by file type",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Is it a PDF?": {
+    "Route by file type": {
       "main": [
         [
           {
             "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract DOCX (JS)",
             "type": "main",
             "index": 0
           }
@@ -512,6 +648,17 @@
       ]
     },
     "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "Assemble text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract DOCX (JS)": {
       "main": [
         [
           {
@@ -548,7 +695,7 @@
       "main": [
         [
           {
-            "node": "Information Extractor",
+            "node": "AI Agent (extract fields)",
             "type": "main",
             "index": 0
           }
@@ -588,7 +735,7 @@
       "main": [
         [
           {
-            "node": "Information Extractor",
+            "node": "AI Agent (extract fields)",
             "type": "main",
             "index": 0
           }
@@ -617,14 +764,25 @@
       "ai_languageModel": [
         [
           {
-            "node": "Information Extractor",
+            "node": "AI Agent (extract fields)",
             "type": "ai_languageModel",
             "index": 0
           }
         ]
       ]
     },
-    "Information Extractor": {
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent (extract fields)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (extract fields)": {
       "main": [
         [
           {
@@ -653,6 +811,11 @@
             "node": "Urgency is High?",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Deadline & urgent enough?",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -673,6 +836,18 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Deadline & urgent enough?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     },
     "Notify (urgent)": {

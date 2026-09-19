@@ -125,10 +125,26 @@ Mock mode returns canned results for both so the buttons work offline.
 
 ## Known limitations
 
-- **DOCX is not extracted.** n8n's *Extract from File* has no DOCX operation,
-  and a DOCX has no page images for the OCR fallback either. A DOCX upload
-  returns `EMPTY_DOCUMENT`. PDF and TXT both work, including scanned/
-  image-only PDFs via a Gemini OCR fallback.
+- **The extraction stage is an AI Agent node, not Information Extractor.**
+  Both the webhook and Drive-trigger pipelines run field extraction through
+  `@n8n/n8n-nodes-langchain.agent` with a Structured Output Parser attached
+  (the same 15-field JSON schema as before) and a Gemini Chat Model as its
+  language model. This was a deliberate rebuild, not a fix for a bug — an
+  Agent node is the more general building block (it supports tool-calling
+  and multi-step reasoning if the extraction logic ever needs it), while the
+  Structured Output Parser still guarantees the same schema-conformant JSON
+  Information Extractor did.
+- **DOCX is now extracted**, via a small pure-JS DEFLATE (RFC 1951) decoder
+  in a Code node — the Code node sandbox has no `zlib`/`DecompressionStream`,
+  so a DOCX (a ZIP containing `word/document.xml`) needed its own inflater.
+  Verified against 6 real `.docx` files, including Hebrew text. PDF, TXT and
+  scanned/image-only PDFs (via Gemini OCR) all still work as before.
+- **A Calendar event is created for urgent, dated documents.** When
+  `Deadline !== 'Not found'` and `Urgency` is High or Medium, both pipelines
+  now also create a Google Calendar event summarizing the document — a
+  second business action alongside the email notification. Needs a Google
+  Calendar credential configured in n8n (not required for the rest of the
+  system to work).
 - **The Drive-trigger and webhook workflows duplicate their shared steps**
   (text extraction, AI extraction, the Needs-Review rule, the Sheet append,
   the Gmail notify) instead of calling one sub-workflow, which is what Part 2
