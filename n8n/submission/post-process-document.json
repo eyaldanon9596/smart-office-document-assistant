@@ -648,7 +648,7 @@
       "main": [
         [
           {
-            "node": "Upload original to Drive",
+            "node": "Assemble text",
             "type": "main",
             "index": 0
           }
@@ -659,7 +659,7 @@
       "main": [
         [
           {
-            "node": "Upload original to Drive",
+            "node": "Assemble text",
             "type": "main",
             "index": 0
           }
@@ -667,17 +667,6 @@
       ]
     },
     "Extract TXT text": {
-      "main": [
-        [
-          {
-            "node": "Upload original to Drive",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Upload original to Drive": {
       "main": [
         [
           {
@@ -689,6 +678,17 @@
       ]
     },
     "Assemble text": {
+      "main": [
+        [
+          {
+            "node": "Upload original to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload original to Drive": {
       "main": [
         [
           {
